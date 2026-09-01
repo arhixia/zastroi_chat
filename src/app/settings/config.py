@@ -18,6 +18,8 @@ class Settings:
     DATABASE_URL: str = f"postgresql+asyncpg://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
     REDIS_URL: str = os.getenv("REDIS_URL")
+    CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL")
+    CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND")
 
     #AI
     OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY")
