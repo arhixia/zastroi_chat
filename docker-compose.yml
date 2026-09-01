@@ -1,0 +1,49 @@
+# Минимальный набор для текущего этапа: только БД + API.
+# celery-worker и flower понадобятся на этапе парсинга (Этап 3) — вернём их,
+# когда дойдём туда. Файлы Dockerfile.worker / requirements-worker.txt уже
+# готовы и лежат в проекте, просто пока не используются.
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: chatbot_db
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASS}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "${DB_HOST_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chatbot_api
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+      - ./migrations:/app/migrations
+    command: >
+      sh -c "
+        alembic upgrade head &&
+        uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --app-dir src
+      "
+
+volumes:
+  pgdata:
