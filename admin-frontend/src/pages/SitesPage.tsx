@@ -6,13 +6,21 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 
+interface DocumentOut {
+  id: string;
+  filename: string;
+  file_type: string;
+  status: string;
+}
+
 interface Site {
-  id: string
-  name: string
-  domain: string
-  crawl_start_urls: string[]
-  crawl_excluded_urls: string[]
-  is_active: boolean
+  id: string;
+  name: string;
+  domain: string;
+  crawl_start_urls: string[];
+  crawl_excluded_urls: string[];
+  is_active: boolean;
+  documents: DocumentOut[];
 }
 
 export function SitesPage() {
@@ -102,15 +110,38 @@ export function SitesPage() {
     const fd = new FormData()
     fd.append("file", file)
     try {
-      // Важно: api.post должен уметь отправлять FormData без JSON.stringify
       await fetch(`${import.meta.env.VITE_API_BASE_URL || "http://localhost:8000"}/api/v1/admin/sites/${siteId}/documents`, {
         method: "POST",
         headers: { "Authorization": `Bearer ${localStorage.getItem("access_token")}` },
         body: fd
       })
       alert("Файл загружен!")
+      loadSites() // Обновляем список после загрузки
     } catch {
       alert("Ошибка загрузки")
+    }
+  }
+
+  async function handleDeleteDocument(docId: string) {
+    if (!confirm("Вы уверены, что хотите удалить этот документ из базы знаний?")) return
+    
+    try {
+      // Используем наш универсальный эндпоинт удаления источников
+      await api.delete(`/api/v1/admin/sources/${docId}?source_type=document`)
+      loadSites()
+    } catch (err: any) {
+      alert(err.message || "Ошибка удаления")
+    }
+  }
+
+  async function handleTriggerCrawl(siteId: string) {
+    if (!confirm("Вы действительно хотите запустить полный парсинг сайта и обработку всех файлов?")) return
+    
+    try {
+      await api.post(`/api/v1/admin/sites/${siteId}/crawl`)
+      alert("Задача отправлена в очередь!")
+    } catch (err: any) {
+      alert(err.message || "Ошибка запуска")
     }
   }
 
@@ -138,7 +169,30 @@ export function SitesPage() {
                 </div>
                 
                 <div className="pt-2 border-t">
-                  <Label className="text-xs text-muted-foreground mb-2 block">Загрузить документ в базу знаний (PDF/XLSX):</Label>
+                  <Label className="text-xs font-bold mb-2 block">База знаний (Файлы):</Label>
+                  {site.documents && site.documents.length > 0 ? (
+                    <ul className="text-xs space-y-2 mb-3 max-h-40 overflow-y-auto pr-1">
+                      {site.documents.map(doc => (
+                        <li key={doc.id} className="flex items-center justify-between bg-muted p-2 rounded group">
+                          <div className="flex items-center gap-2 truncate">
+                            <span>📄</span>
+                            <span className="truncate font-medium">{doc.filename}</span>
+                          </div>
+                          <button 
+                            onClick={() => handleDeleteDocument(doc.id)}
+                            className="text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity px-2"
+                            title="Удалить документ"
+                          >
+                            ✕
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-muted-foreground mb-3 italic">Нет загруженных файлов</p>
+                  )}
+
+                  <Label className="text-xs text-muted-foreground mb-1 block">Загрузить новый файл:</Label>
                   <Input 
                     type="file" 
                     accept=".pdf,.docx,.xlsx,.txt"
@@ -150,9 +204,9 @@ export function SitesPage() {
                   size="sm" 
                   variant="secondary" 
                   className="w-full mt-2"
-                  onClick={() => api.post(`/api/v1/admin/sites/${site.id}/crawl`).then(() => alert("Парсинг запущен!"))}
+                  onClick={() => handleTriggerCrawl(site.id)}
                 >
-                  🚀 Запустить парсинг
+                Запустить полный парсинг
                 </Button>
               </CardContent>
             </Card>

@@ -52,6 +52,7 @@ services:
     volumes:
       - ./src:/app/src
       - ./migrations:/app/migrations
+      - uploads_data:/app/uploads
     command: >
       sh -c "
         alembic upgrade head &&
@@ -64,7 +65,7 @@ services:
       dockerfile: Dockerfile
     container_name: chatbot_worker
     restart: unless-stopped
-    env_file: .env # Используем те же секреты, что и у API
+    env_file: .env 
     depends_on:
       postgres:
         condition: service_healthy
@@ -72,8 +73,8 @@ services:
         condition: service_healthy
     volumes:
       - ./src:/app/src
+      - uploads_data:/app/uploads
     working_dir: /app/src
-    # Команда запуска ARQ воркера
     command: arq app.workers.worker_settings.WorkerSettings
 
   admin-frontend:
@@ -93,3 +94,4 @@ services:
 volumes:
   pgdata:
   redis_data:
+  uploads_data:

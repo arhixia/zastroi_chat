@@ -7,6 +7,7 @@ from arq.connections import ArqRedis
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, update
+from sqlalchemy.orm import joinedload
 
 from app.settings.config import settings
 from app.api.auth.deps import CurrentUser, DbSession
@@ -26,7 +27,7 @@ router = APIRouter(prefix="/admin", tags=["Admin"])
 
 
 UPLOAD_DIR = Path("uploads")
-UPLOAD_DIR.mkdir(exist_ok=True)
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # --- Управление сайтами ---
@@ -53,8 +54,12 @@ async def create_site(payload: SiteCreate, db: DbSession, _: CurrentUser):
 
 @router.get("/sites", response_model=list[SiteOut])
 async def list_sites(db: DbSession, _: CurrentUser):
-    result = await db.execute(select(Site).order_by(Site.created_at.desc()))
-    return result.scalars().all()
+    result = await db.execute(
+        select(Site)
+        .options(joinedload(Site.documents))
+        .order_by(Site.created_at.desc())
+    )
+    return result.scalars().unique().all()
 
 
 @router.patch("/sites/{site_id}", response_model=SiteOut)

@@ -1,8 +1,15 @@
 import uuid
 from datetime import datetime
-
 from pydantic import BaseModel, ConfigDict
 
+class DocumentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: uuid.UUID
+    filename: str
+    file_type: str 
+    status: str
+    uploaded_at: datetime
 
 class SiteCreate(BaseModel):
     name: str
@@ -15,10 +22,7 @@ class SiteCreate(BaseModel):
     widget_bot_name: str = "Помощник"
     widget_welcome_message: str = "Здравствуйте! Чем могу помочь?"
 
-
 class SiteUpdate(BaseModel):
-    """Все поля опциональны — PATCH обновляет только переданные."""
-
     name: str | None = None
     domain: str | None = None
     allowed_origins: list[str] | None = None
@@ -29,7 +33,6 @@ class SiteUpdate(BaseModel):
     widget_bot_name: str | None = None
     widget_welcome_message: str | None = None
     is_active: bool | None = None
-
 
 class SiteOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -47,6 +50,7 @@ class SiteOut(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    documents: list[DocumentOut] = [] 
 
 
 class WidgetSnippetOut(BaseModel):
