@@ -16,9 +16,9 @@ passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
 
 
-celery[redis]==5.4.0
-redis==5.0.8
-flower==2.0.1          
+arq==0.28.0
+hiredis==3.4.1
+redis==5.0.8        
 
 
 playwright==1.47.0

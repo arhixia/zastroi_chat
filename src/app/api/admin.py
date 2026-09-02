@@ -3,6 +3,7 @@ import io
 from pathlib import Path
 import uuid
 
+from arq.connections import ArqRedis
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, update
@@ -19,7 +20,7 @@ from app.db.models.lead import Lead
 from app.db.models.page import Page, PageStatus
 from app.db.models.site import Site
 from app.schemas.site import SiteCreate, SiteOut, SiteUpdate, WidgetSnippetOut
-from app.workers.tasks import start_crawl_task
+
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -32,11 +33,18 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 
 @router.post("/sites", response_model=SiteOut, status_code=status.HTTP_201_CREATED)
 async def create_site(payload: SiteCreate, db: DbSession, _: CurrentUser):
+    start_urls = payload.crawl_start_urls.copy()
+    if not start_urls:
+        start_urls.append(f"https://{payload.domain}")
+        
+    site_data = payload.model_dump()
+    site_data['crawl_start_urls'] = start_urls
+
     existing = await db.execute(select(Site).where(Site.domain == payload.domain))
     if existing.scalar_one_or_none():
         raise HTTPException(status.HTTP_409_CONFLICT, "Домен уже занят")
     
-    site = Site(**payload.model_dump())
+    site = Site(**site_data)
     db.add(site)
     await db.commit()
     await db.refresh(site)
@@ -75,14 +83,28 @@ async def get_widget_snippet(site_id: uuid.UUID, db: DbSession, _: CurrentUser):
 
 # --- Парсинг и База Знаний ---
 
+async def get_arq_redis() -> ArqRedis:
+    from arq.connections import create_pool
+    from app.workers.worker_settings import WorkerSettings
+    return await create_pool(WorkerSettings.redis_settings)
+
+
 @router.post("/sites/{site_id}/crawl", status_code=status.HTTP_202_ACCEPTED)
-async def trigger_crawl(site_id: uuid.UUID, db: DbSession, _: CurrentUser):
+async def trigger_crawl(
+    site_id: uuid.UUID, 
+    db: DbSession, 
+    _: CurrentUser,
+    redis: ArqRedis = Depends(get_arq_redis)
+):
     site = await _get_site_or_404(db, site_id)
+    
     run = CrawlRun(site_id=site.id, status=CrawlStatus.running)
     db.add(run)
     await db.commit()
     await db.refresh(run)
-    start_crawl_task.delay(str(site.id), str(run.id))
+   
+    await redis.enqueue_job('start_crawl_job', str(site.id), str(run.id))
+    
     return {"run_id": str(run.id)}
 
 
@@ -93,8 +115,14 @@ async def get_crawl_history(site_id: uuid.UUID, db: DbSession, _: CurrentUser):
     )
     return result.scalars().all()
 
+
 @router.post("/sites/{site_id}/documents", status_code=status.HTTP_201_CREATED)
-async def upload_document(site_id: uuid.UUID, file: UploadFile = File(...), db: DbSession = Depends(), _: CurrentUser = Depends()):
+async def upload_document(
+    site_id: uuid.UUID,
+    db: DbSession,
+    _: CurrentUser,
+    file: UploadFile = File(...),
+):
     site = await _get_site_or_404(db, site_id)
     
     ext = Path(file.filename).suffix.lower()

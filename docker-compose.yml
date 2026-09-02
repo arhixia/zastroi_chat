@@ -1,7 +1,4 @@
-# Минимальный набор для текущего этапа: только БД + API.
-# celery-worker и flower понадобятся на этапе парсинга (Этап 3) — вернём их,
-# когда дойдём туда. Файлы Dockerfile.worker / requirements-worker.txt уже
-# готовы и лежат в проекте, просто пока не используются.
+version: '3.8'
 
 services:
   postgres:
@@ -24,6 +21,20 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    container_name: chatbot_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   api:
     build:
       context: .
@@ -33,6 +44,8 @@ services:
     env_file: .env
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     ports:
       - "8000:8000"
@@ -45,5 +58,38 @@ services:
         uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --app-dir src
       "
 
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chatbot_worker
+    restart: unless-stopped
+    env_file: .env # Используем те же секреты, что и у API
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src
+    working_dir: /app/src
+    # Команда запуска ARQ воркера
+    command: arq app.workers.worker_settings.WorkerSettings
+
+  admin-frontend:
+    image: node:20-slim
+    container_name: chatbot_admin_frontend
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - ./admin-frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+
 volumes:
   pgdata:
+  redis_data:

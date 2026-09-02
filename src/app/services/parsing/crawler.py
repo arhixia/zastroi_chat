@@ -11,13 +11,17 @@ from app.services.parsing.site_parsing import PageFetchError, PlaywrightFetcher
 
 
 async def run_crawl(db: AsyncSession, site: Site, max_pages: int = 200) -> CrawlRun:
+    print(f"[CRAWLER] Запуск парсинга для сайта: {site.name} ({site.domain})")
+    
     crawl_run = CrawlRun(site_id=site.id, status=CrawlStatus.running)
     db.add(crawl_run)
     await db.commit()
     await db.refresh(crawl_run)
 
     excluded = {normalize_url(u) for u in (site.crawl_excluded_urls or [])}
-    queue: deque[str] = deque(normalize_url(u) for u in (site.crawl_start_urls or []))
+    start_urls = site.crawl_start_urls if site.crawl_start_urls else [f"https://{site.domain}"]
+    queue: deque[str] = deque(normalize_url(u) for u in start_urls)
+    
     visited: set[str] = set()
     found_urls: set[str] = set()
 
@@ -29,11 +33,14 @@ async def run_crawl(db: AsyncSession, site: Site, max_pages: int = 200) -> Crawl
             url = queue.popleft()
             if url in visited or url in excluded:
                 continue
+            
             visited.add(url)
+            print(f"[CRAWLER] Обработка ({len(visited)}/{max_pages}): {url}")
 
             try:
                 html = await fetcher.fetch(url)
             except PageFetchError as e:
+                print(f"❌ [CRAWLER] Ошибка загрузки: {url} - {e}")
                 errors.append({"url": url, "error": str(e)})
                 continue
 
@@ -41,20 +48,34 @@ async def run_crawl(db: AsyncSession, site: Site, max_pages: int = 200) -> Crawl
 
             try:
                 result = await process_fetched_page(db, site, url, html)
+                action = result.get("action")
+                
+                if action == "added":
+                    added += 1
+                    print(f"[CRAWLER] Добавлено: {url} (чанков: {result.get('chunks', 0)})")
+                elif action == "updated":
+                    updated += 1
+                    print(f"[CRAWLER] Обновлено: {url}")
+                elif action == "skipped":
+                    print(f"[CRAWLER] Пропущено: {url} ({result.get('reason')})")
+                    
             except Exception as e:
+                print(f"💥 [CRAWLER] Ошибка обработки контента: {url} - {e}")
                 errors.append({"url": url, "error": f"ошибка обработки: {e}"})
                 continue
 
             processed += 1
-            if result["action"] == "added":
-                added += 1
-            elif result["action"] == "updated":
-                updated += 1
 
-            for link in extract_links(html, base_url=url, allowed_domain=site.domain):
+            # Извлекаем ссылки и добавляем в очередь
+            new_links = extract_links(html, base_url=url, allowed_domain=site.domain)
+            for link in new_links:
                 if link not in visited and link not in excluded:
                     queue.append(link)
+            
+            if new_links:
+                print(f"🔗 [CRAWLER] Найдено {len(new_links)} новых ссылок на странице")
 
+    print(f"🧹 [CRAWLER] Проверка устаревших страниц...")
     pages_stale = await _mark_stale_pages(db, site, found_urls)
 
     crawl_run.status = CrawlStatus.success if not errors else CrawlStatus.partial
@@ -67,6 +88,7 @@ async def run_crawl(db: AsyncSession, site: Site, max_pages: int = 200) -> Crawl
     await db.commit()
     await db.refresh(crawl_run)
 
+    print(f"[CRAWLER] Парсинг завершен! Обработано: {processed}, Добавлено: {added}, Устарело: {pages_stale}")
     return crawl_run
 
 
