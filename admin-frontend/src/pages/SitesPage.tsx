@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react"
+import { Link } from "react-router-dom" // <-- 1. Добавляем импорт
 import { api } from "@/lib/api"
 import { useAuth } from "@/context/AuthContext"
 import { Button } from "@/components/ui/button"
@@ -116,7 +117,7 @@ export function SitesPage() {
         body: fd
       })
       alert("Файл загружен!")
-      loadSites() // Обновляем список после загрузки
+      loadSites()
     } catch {
       alert("Ошибка загрузки")
     }
@@ -126,9 +127,14 @@ export function SitesPage() {
     if (!confirm("Вы уверены, что хотите удалить этот документ из базы знаний?")) return
     
     try {
-      // Используем наш универсальный эндпоинт удаления источников
       await api.delete(`/api/v1/admin/sources/${docId}?source_type=document`)
-      loadSites()
+      
+      setSites(prevSites => prevSites.map(site => ({
+        ...site,
+        documents: site.documents.filter(doc => doc.id !== docId)
+      })))
+      
+      loadSites() 
     } catch (err: any) {
       alert(err.message || "Ошибка удаления")
     }
@@ -147,9 +153,15 @@ export function SitesPage() {
 
   return (
     <div className="mx-auto max-w-6xl p-6">
+      {/* 2. Обновленная шапка с кнопкой */}
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold">Управление сайтами</h1>
-        <Button variant="outline" onClick={logout}>Выйти</Button>
+        <div className="flex gap-2">
+          <Link to="/leads">
+            <Button variant="secondary">📋 Заявки</Button>
+          </Link>
+          <Button variant="outline" onClick={logout}>Выйти</Button>
+        </div>
       </div>
 
       <Button onClick={openCreate} className="mb-6">Добавить сайт</Button>

@@ -18,6 +18,13 @@
     localStorage.setItem(visitorKey, visitorId);
   }
 
+  // СОСТОЯНИЕ СБОРА ЛИДА
+  var leadState = {
+    step: "none", // none, name, phone, confirm
+    tempName: "",
+    tempPhone: ""
+  };
+
   var button = document.createElement("button");
   button.textContent = "Чат";
   button.style.cssText =
@@ -60,10 +67,10 @@
 
   function addMessage(role, text) {
     var bubble = document.createElement("div");
-    bubble.textContent = text;
+    bubble.innerHTML = text.replace(/\n/g, "<br>");
     var isUser = role === "user";
     bubble.style.cssText =
-      "max-width:80%;padding:8px 12px;border-radius:10px;font-size:13px;" +
+      "max-width:80%;padding:8px 12px;border-radius:10px;font-size:13px;line-height:1.4;" +
       (isUser
         ? "align-self:flex-end;background:#2563eb;color:#fff"
         : "align-self:flex-start;background:#f1f1f1;color:#111");
@@ -75,13 +82,7 @@
     windowEl.style.display = windowEl.style.display === "flex" ? "none" : "flex";
   });
 
-  function sendMessage() {
-    var text = input.value.trim();
-    if (!text) return;
-
-    addMessage("user", text);
-    input.value = "";
-
+    function processRegularMessage(text) {
     fetch(apiBase + "/api/v1/widget/message", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -94,15 +95,103 @@
         referrer: document.referrer || null,
       }),
     })
-      .then(function (res) {
-        return res.json();
-      })
+      .then(function (res) { return res.json(); })
       .then(function (data) {
         addMessage("assistant", data.answer);
+        if (data.ask_lead) {
+          leadState.step = "name";
+          addMessage("assistant", "Чтобы дать точный ответ, позвольте узнать ваше имя?");
+        }
       })
       .catch(function () {
-        addMessage("assistant", "Не удалось получить ответ, попробуйте позже.");
+        addMessage("assistant", "Не удалось получить ответ.");
       });
+  }
+
+  function sendMessage() {
+    var text = input.value.trim();
+    if (!text) return;
+
+    addMessage("user", text);
+    input.value = "";
+
+    // --- УМНАЯ ЛОГИКА СБОРА ЛИДА С ИИ-КЛАССИФИКАЦИЕЙ ---
+    if (leadState.step === "name" || leadState.step === "phone") {
+      fetch(apiBase + "/api/v1/widget/classify-lead-response", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text })
+      })
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        var category = data.category;
+
+        if (leadState.step === "name") {
+          if (category === "NAME") {
+            leadState.tempName = text;
+            leadState.step = "phone";
+            addMessage("assistant", "Приятно познакомиться! Напишите ваш номер телефона для связи.");
+          } else if (category === "REFUSAL") {
+            leadState.step = "none";
+            addMessage("assistant", "Хорошо, если передумаете — я всегда здесь. Чем еще могу помочь по ЖК?");
+          } else {
+            // QUESTION или PHONE — прерываем сбор и отвечаем на вопрос
+            leadState.step = "none";
+            processRegularMessage(text);
+          }
+        } 
+        else if (leadState.step === "phone") {
+          if (category === "PHONE") {
+            leadState.tempPhone = text;
+            leadState.step = "confirm";
+            addMessage("assistant", "Проверяем данные:<br><b>Имя:</b> " + leadState.tempName + "<br><b>Телефон:</b> " + text + "<br><br>Напишите <b>\"Да\"</b>, чтобы подтвердить согласие на обработку персональных данных.");
+          } else if (category === "REFUSAL") {
+            leadState.step = "none";
+            addMessage("assistant", "Понял вас. Если будут вопросы по объектам — обращайтесь!");
+          } else {
+            // NAME или QUESTION — прерываем сбор и отвечаем на вопрос
+            leadState.step = "none";
+            processRegularMessage(text);
+          }
+        }
+      })
+      .catch(function() {
+        // В случае ошибки классификации — безопасный фолбэк на обычный чат
+        leadState.step = "none";
+        processRegularMessage(text);
+      });
+      return;
+    }
+
+    // --- ПОДТВЕРЖДЕНИЕ (обрабатываем локально, без ИИ) ---
+    if (leadState.step === "confirm") {
+      if (text.toLowerCase().includes("да")) {
+        fetch(apiBase + "/api/v1/widget/lead", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            site_id: siteId,
+            session_id: sessionId,     
+            last_message: text,      
+            name: leadState.tempName,
+            phone: leadState.tempPhone
+          })
+        }).then(() => {
+          addMessage("assistant", "✅ Спасибо! Заявка успешно отправлена. Менеджер свяжется с вами.");
+          leadState.step = "none";
+        }).catch(() => {
+           addMessage("assistant", "Ошибка отправки. Попробуйте позже.");
+           leadState.step = "none";
+        });
+      } else {
+        addMessage("assistant", "Хорошо, давайте начнем сначала. Как к вам обращаться?");
+        leadState.step = "name";
+      }
+      return;
+    }
+
+    // --- ОБЫЧНЫЙ ЗАПРОС К RAG ---
+    processRegularMessage(text);
   }
 
   sendBtn.addEventListener("click", sendMessage);

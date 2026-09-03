@@ -11,7 +11,7 @@ from app.services.parsing.document_parsing import extract_text
 
 
 async def start_crawl_job(ctx, site_id_str: str, crawl_run_id_str: str):
-    print(f"[WORKER] Задача получена! Сайт: {site_id_str}")
+    print(f"🔥 [WORKER] Задача получена! Сайт: {site_id_str}")
     
     site_id = uuid.UUID(site_id_str)
     crawl_run_id = uuid.UUID(crawl_run_id_str)
@@ -22,7 +22,7 @@ async def start_crawl_job(ctx, site_id_str: str, crawl_run_id_str: str):
             site = result.scalar_one_or_none()
             if not site: raise ValueError("Site not found")
 
-            print(f"⚙️ [WORKER] Запускаю обход страниц для {site.domain}...")
+            print(f"[WORKER] Запускаю обход страниц для {site.domain}...")
             await run_crawl(db, site)
             
             print(f"[WORKER] Начинаю индексацию загруженных файлов...")
@@ -34,6 +34,9 @@ async def start_crawl_job(ctx, site_id_str: str, crawl_run_id_str: str):
             )
             documents = docs_result.scalars().all()
             
+            if not documents:
+                print(f"[WORKER] Активных документов не найдено.")
+
             for doc in documents:
                 try:
                     file_path_str = doc.storage_path
@@ -50,7 +53,10 @@ async def start_crawl_job(ctx, site_id_str: str, crawl_run_id_str: str):
                     text = extract_text(file_path, doc.file_type)
                     
                     if text.strip():
-                        await index_text(
+                        preview = text[:200].replace("\n", " ")
+                        print(f"[WORKER] Превью контента: {preview}...")
+
+                        n_chunks = await index_text(
                             db=db,
                             site_id=site.id,
                             source_type=SourceType.document,
@@ -58,16 +64,16 @@ async def start_crawl_job(ctx, site_id_str: str, crawl_run_id_str: str):
                             source_label=doc.filename,
                             text=text
                         )
-                        print(f"[WORKER] Файл {doc.filename} проиндексирован")
+                        print(f"[WORKER] Файл {doc.filename} проиндексирован! Создано чанков: {n_chunks}")
                     else:
-                        print(f"[WORKER] Файл {doc.filename} пуст")
+                        print(f"[WORKER] Файл {doc.filename} пуст или не содержит текста")
                         
                 except Exception as e:
-                    print(f"[WORKER] Ошибка файла {doc.filename}: {e}")
+                    print(f"[WORKER] Ошибка обработки файла {doc.filename}: {e}")
 
             await db.commit()
             print(f"[WORKER] Полный цикл завершен")
             
         except Exception as e:
-            print(f"[WORKER] Ошибка задачи: {e}")
+            print(f"[WORKER] Критическая ошибка задачи: {e}")
             raise e

@@ -9,12 +9,15 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select, update
 from sqlalchemy.orm import joinedload
 
+from app.db.models.conversation import Conversation
+from app.schemas.widget import LeadOut
 from app.settings.config import settings
 from app.api.auth.deps import CurrentUser, DbSession
 from app.api.auth.auth import get_password_hash
 from app.api.sites import _get_site_or_404
 from app.db.models.admin import Admin
 from app.db.models.chunk import Chunk, SourceType
+from app.db.models.message import Message
 from app.db.models.crawl_run import CrawlRun, CrawlStatus
 from app.db.models.document import Document, DocumentStatus, DocumentType
 from app.db.models.lead import Lead
@@ -48,7 +51,14 @@ async def create_site(payload: SiteCreate, db: DbSession, _: CurrentUser):
     site = Site(**site_data)
     db.add(site)
     await db.commit()
-    await db.refresh(site)
+    
+    result = await db.execute(
+        select(Site)
+        .where(Site.id == site.id)
+        .options(joinedload(Site.documents))
+    )
+    site = result.scalars().first()
+    
     return site
 
 
@@ -59,7 +69,12 @@ async def list_sites(db: DbSession, _: CurrentUser):
         .options(joinedload(Site.documents))
         .order_by(Site.created_at.desc())
     )
-    return result.scalars().unique().all()
+    sites = result.scalars().unique().all()
+    
+    for site in sites:
+        site.documents = [doc for doc in site.documents if doc.status == DocumentStatus.active]
+        
+    return sites
 
 
 @router.patch("/sites/{site_id}", response_model=SiteOut)
@@ -68,7 +83,13 @@ async def update_site(site_id: uuid.UUID, payload: SiteUpdate, db: DbSession, _:
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(site, field, value)
     await db.commit()
-    await db.refresh(site)
+    
+    result = await db.execute(
+        select(Site)
+        .where(Site.id == site_id)
+        .options(joinedload(Site.documents))
+    )
+    site = result.scalars().first()
     return site
 
 
@@ -167,39 +188,89 @@ async def delete_source(source_id: uuid.UUID, source_type: str, db: DbSession, _
 
 # --- Лиды и Аналитика ---
 
-@router.get("/leads")
+@router.get("/leads", response_model=list[LeadOut])
 async def get_leads(db: DbSession, _: CurrentUser, phone: str | None = None):
-    query = select(Lead).join_from(Lead, Site, Lead.site_id == Site.id)
+    query = select(Lead, Site.name).join_from(Lead, Site, Lead.site_id == Site.id)
+    
     if phone:
-        query = query.where(Lead.phone.contains(phone.replace(" ", "")))
+        clean_phone = phone.replace(" ", "").replace("-", "")
+        query = query.where(Lead.phone.contains(clean_phone))
     
     result = await db.execute(query.order_by(Lead.created_at.desc()))
-    return result.scalars().all()
+    
+    leads_out = []
+    for lead, site_name in result.all():
+        lead_dict = {
+            "id": lead.id,
+            "site_id": lead.site_id,
+            "site_name": site_name,
+            "name": lead.name,
+            "phone": lead.phone,
+            "interest": lead.interest,
+            "created_at": lead.created_at
+        }
+        leads_out.append(lead_dict)
+        
+    return leads_out
+
+
+@router.get("/leads/{lead_id}/details")
+async def get_lead_details(lead_id: uuid.UUID, db: DbSession, _: CurrentUser):
+    """Возвращает детали лида и историю переписки."""
+    
+    lead = await db.get(Lead, lead_id)
+    if not lead:
+        raise HTTPException(404, "Заявка не найдена")
+
+    conversation = await db.get(Conversation, lead.conversation_id)
+    
+    messages = []
+    if conversation:
+        result = await db.execute(
+            select(Message)
+            .where(Message.conversation_id == conversation.id)
+            .order_by(Message.created_at.asc())
+        )
+        messages = result.scalars().all()
+
+    return {
+        "lead": lead,
+        "conversation": conversation,
+        "messages": messages
+    }
 
 
 @router.get("/leads/export/csv")
 async def export_leads_csv(db: DbSession, _: CurrentUser):
-    """Выгрузка всех лидов в CSV."""
-    result = await db.execute(select(Lead).order_by(Lead.created_at.desc()))
-    leads = result.scalars().all()
-
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(["ID", "Имя", "Телефон", "Дата", "Интерес", "Сайт"])
+    """Выгрузка лидов в красивом формате для Excel."""
+    query = select(Lead, Site.name).join_from(Lead, Site, Lead.site_id == Site.id)
+    result = await db.execute(query.order_by(Lead.created_at.desc()))
     
-    for lead in leads:
+    output = io.StringIO()
+    output.write('\ufeff') 
+    
+    writer = csv.writer(output, delimiter=';', quoting=csv.QUOTE_MINIMAL)
+
+    writer.writerow(["Дата", "Сайт", "Имя клиента", "Телефон", "Последний вопрос"])
+    
+    for lead, site_name in result.all():
+        last_question = "Не указан"
+        if lead.interest and isinstance(lead.interest, dict):
+            q = lead.interest.get("last_question", "")
+            if q and len(q) > 2: 
+                last_question = str(q).replace("\n", " ").strip()
+
         writer.writerow([
-            str(lead.id), 
-            lead.name, 
-            lead.phone, 
-            lead.created_at.strftime("%Y-%m-%d %H:%M"),
-            str(lead.interest),
-            lead.site_id 
+            lead.created_at.strftime("%d.%m.%Y %H:%M"),
+            site_name,
+            lead.name,
+            lead.phone,
+            last_question
         ])
 
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]),
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=leads.csv"}
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=leads_export.csv"}
     )
