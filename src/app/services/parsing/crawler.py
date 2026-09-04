@@ -40,7 +40,7 @@ async def run_crawl(db: AsyncSession, site: Site, max_pages: int = 200) -> Crawl
             try:
                 html = await fetcher.fetch(url)
             except PageFetchError as e:
-                print(f"❌ [CRAWLER] Ошибка загрузки: {url} - {e}")
+                print(f"[CRAWLER] Ошибка загрузки: {url} - {e}")
                 errors.append({"url": url, "error": str(e)})
                 continue
 
@@ -60,22 +60,21 @@ async def run_crawl(db: AsyncSession, site: Site, max_pages: int = 200) -> Crawl
                     print(f"[CRAWLER] Пропущено: {url} ({result.get('reason')})")
                     
             except Exception as e:
-                print(f"💥 [CRAWLER] Ошибка обработки контента: {url} - {e}")
+                print(f"[CRAWLER] Ошибка обработки контента: {url} - {e}")
                 errors.append({"url": url, "error": f"ошибка обработки: {e}"})
                 continue
 
             processed += 1
 
-            # Извлекаем ссылки и добавляем в очередь
             new_links = extract_links(html, base_url=url, allowed_domain=site.domain)
             for link in new_links:
                 if link not in visited and link not in excluded:
                     queue.append(link)
             
             if new_links:
-                print(f"🔗 [CRAWLER] Найдено {len(new_links)} новых ссылок на странице")
+                print(f"[CRAWLER] Найдено {len(new_links)} новых ссылок на странице")
 
-    print(f"🧹 [CRAWLER] Проверка устаревших страниц...")
+    print(f"[CRAWLER] Проверка устаревших страниц...")
     pages_stale = await _mark_stale_pages(db, site, found_urls)
 
     crawl_run.status = CrawlStatus.success if not errors else CrawlStatus.partial
