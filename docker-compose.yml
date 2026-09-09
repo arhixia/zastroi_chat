@@ -18,6 +18,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - zastroi_net
 
   redis:
     image: redis:7-alpine
@@ -32,6 +34,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - zastroi_net
 
   api:
     build:
@@ -56,6 +60,8 @@ services:
         alembic upgrade head &&
         uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --app-dir src
       "
+    networks:
+      - zastroi_net
 
   worker:
     build:
@@ -74,20 +80,30 @@ services:
       - uploads_data:/app/uploads
     working_dir: /app/src
     command: arq app.workers.worker_settings.WorkerSettings
+    networks:
+      - zastroi_net
 
   admin-frontend:
-    image: node:20-slim
+    build:
+      context: ./admin-frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${API_HOST}
     container_name: chatbot_admin_frontend
     restart: unless-stopped
-    working_dir: /app
     volumes:
-      - ./admin-frontend:/app
+      - ./admin-frontend/src:/app/src
+      - ./admin-frontend/public:/app/public
+      - ./admin-frontend/index.html:/app/index.html
+      - ./admin-frontend/vite.config.ts:/app/vite.config.ts
+      - ./admin-frontend/tsconfig.json:/app/tsconfig.json
+      - ./admin-frontend/package.json:/app/package.json
+      - ./admin-frontend/package-lock.json:/app/package-lock.json
       - /app/node_modules
     ports:
       - "5173:5173"
-    environment:
-      - VITE_API_BASE_URL=http://localhost:8000
-    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    networks:
+      - zastroi_net
 
   test-builder-site:
     image: nginx:alpine
@@ -97,8 +113,16 @@ services:
       - ./test_builder_site:/usr/share/nginx/html:ro
     ports:
       - "8081:80"
+    networks:
+      zastroi_net:
+        aliases:
+          - test-builder-site # Явный алиас для DNS внутри Docker
 
 volumes:
   pgdata:
   redis_data:
   uploads_data:
+
+networks:
+  zastroi_net:
+    driver: bridge

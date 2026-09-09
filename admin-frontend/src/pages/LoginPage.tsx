@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from "react"
 import { useNavigate } from "react-router-dom"
+import { Building2 } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
 export function LoginPage() {
   const { login } = useAuth()
@@ -29,10 +30,14 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-svh items-center justify-center bg-secondary/30">
+    <div className="flex min-h-svh items-center justify-center bg-muted/40 p-4">
       <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle>Вход в админ-панель</CardTitle>
+        <CardHeader className="items-center text-center">
+          <div className="mb-2 flex size-11 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <Building2 className="size-5" />
+          </div>
+          <CardTitle className="text-xl">Админ-панель</CardTitle>
+          <CardDescription>Войдите, чтобы управлять сайтами застройщика</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -57,7 +62,7 @@ export function LoginPage() {
               />
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading} className="mt-1">
               {loading ? "Входим..." : "Войти"}
             </Button>
           </form>

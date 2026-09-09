@@ -6,11 +6,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Системные библиотеки под Chromium ставим вручную, актуальными для Debian
-# bookworm именами. НЕ используем "playwright install --with-deps" — этот
-# флаг тянет пакеты по старым именам (ttf-ubuntu-font-family, ttf-unifont),
-# которых в bookworm больше нет (переименованы в fonts-*), и падает с ошибкой
-# "has no installation candidate". См. github.com/microsoft/playwright/issues/24028
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
     libdbus-1-3 libxcb1 libxkbcommon0 libx11-6 libxcomposite1 libxdamage1 \

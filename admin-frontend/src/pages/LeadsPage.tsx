@@ -1,10 +1,19 @@
 import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
+import { ArrowLeft, Download, MessageSquareText, User, Bot } from "lucide-react"
 import { api } from "@/lib/api"
 import { useAuth } from "@/context/AuthContext"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog"
 
 // --- Интерфейсы для типизации ---
 
@@ -34,7 +43,7 @@ export function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
   const [searchPhone, setSearchPhone] = useState("")
-  
+
   // Состояние для деталей заявки
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
   const [leadDetails, setLeadDetails] = useState<Lead | null>(null)
@@ -45,7 +54,6 @@ export function LeadsPage() {
     setLoading(true)
     try {
       const url = phone ? `/api/v1/admin/leads?phone=${phone}` : "/api/v1/admin/leads"
-      // Явно указываем тип ответа: массив лидов
       const data = await api.get<Lead[]>(url)
       setLeads(data)
     } catch {
@@ -59,7 +67,6 @@ export function LeadsPage() {
     setSelectedLeadId(leadId)
     setLoadingDetails(true)
     try {
-      // Явно указываем тип ответа: объект с деталями
       const data = await api.get<LeadDetailsResponse>(`/api/v1/admin/leads/${leadId}/details`)
       setLeadDetails(data.lead)
       setMessages(data.messages || [])
@@ -77,10 +84,10 @@ export function LeadsPage() {
     loadLeads(searchPhone)
   }
 
-    async function handleExport() {
+  async function handleExport() {
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_API_BASE_URL || "http://localhost:8000"}/api/v1/admin/leads/export/csv`, 
+        `${import.meta.env.VITE_API_BASE_URL || "http://localhost:8000"}/api/v1/admin/leads/export/csv`,
         {
           method: "GET",
           headers: {
@@ -92,18 +99,17 @@ export function LeadsPage() {
       if (!response.ok) throw new Error("Ошибка экспорта")
       const blob = await response.blob()
       const url = window.URL.createObjectURL(blob)
-      
+
       const a = document.createElement("a")
       a.style.display = "none"
       a.href = url
-      a.download = "leads_export.csv" 
+      a.download = "leads_export.csv"
       document.body.appendChild(a)
       a.click()
-      
 
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
-      
+
     } catch (err) {
       alert("Не удалось скачать файл. Проверьте подключение.")
     }
@@ -112,29 +118,36 @@ export function LeadsPage() {
   return (
     <div className="mx-auto max-w-6xl p-6">
       <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <Link to="/sites">
-            <Button variant="ghost" size="sm">← Назад к сайтам</Button>
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="size-4" />
+            </Button>
           </Link>
-          <h1 className="text-2xl font-bold">Заявки от клиентов</h1>
+          <div>
+            <h1 className="text-2xl font-semibold">Заявки</h1>
+            <p className="text-sm text-muted-foreground">Обращения клиентов со всех подключённых сайтов</p>
+          </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleExport}>📥 Скачать CSV</Button>
+          <Button variant="outline" onClick={handleExport}>
+            <Download className="size-4" />
+            Скачать CSV
+          </Button>
           <Button variant="outline" onClick={logout}>Выйти</Button>
         </div>
       </div>
 
-      {/* Поиск */}
       <Card className="mb-6">
         <CardContent className="pt-6">
-          <form onSubmit={handleSearch} className="flex gap-4">
-            <Input 
-              placeholder="Поиск по номеру телефона..." 
+          <form onSubmit={handleSearch} className="flex gap-3">
+            <Input
+              placeholder="Поиск по номеру телефона..."
               value={searchPhone}
               onChange={(e) => setSearchPhone(e.target.value)}
               className="max-w-sm"
             />
-            <Button type="submit">Найти</Button>
+            <Button type="submit" variant="secondary">Найти</Button>
             {searchPhone && (
               <Button type="button" variant="ghost" onClick={() => { setSearchPhone(""); loadLeads(); }}>
                 Сбросить
@@ -144,105 +157,93 @@ export function LeadsPage() {
         </CardContent>
       </Card>
 
-      {/* Таблица заявок */}
       {loading ? (
-        <p>Загрузка данных...</p>
+        <p className="text-sm text-muted-foreground">Загрузка данных...</p>
       ) : leads.length === 0 ? (
-        <div className="text-center py-10 text-muted-foreground">
+        <div className="py-10 text-center text-sm text-muted-foreground">
           Заявок пока нет.
         </div>
       ) : (
         <div className="rounded-md border">
-          <table className="w-full text-sm">
-            <thead className="bg-muted">
-              <tr>
-                <th className="p-3 text-left font-medium">Дата</th>
-                <th className="p-3 text-left font-medium">Сайт</th>
-                <th className="p-3 text-left font-medium">Имя</th>
-                <th className="p-3 text-left font-medium">Телефон</th>
-                <th className="p-3 text-left font-medium">Интерес</th>
-                <th className="p-3 text-left font-medium"></th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Дата</TableHead>
+                <TableHead>Сайт</TableHead>
+                <TableHead>Имя</TableHead>
+                <TableHead>Телефон</TableHead>
+                <TableHead>Интерес</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {leads.map((lead) => (
-                <tr key={lead.id} className="border-t hover:bg-muted/50">
-                  <td className="p-3 text-muted-foreground">
+                <TableRow key={lead.id}>
+                  <TableCell className="text-muted-foreground">
                     {new Date(lead.created_at).toLocaleString("ru-RU")}
-                  </td>
-                  <td className="p-3 font-medium">{lead.site_name}</td>
-                  <td className="p-3">{lead.name}</td>
-                  <td className="p-3">
-                    <a href={`tel:${lead.phone}`} className="text-blue-600 hover:underline">
+                  </TableCell>
+                  <TableCell className="font-medium">{lead.site_name}</TableCell>
+                  <TableCell>{lead.name}</TableCell>
+                  <TableCell>
+                    <a href={`tel:${lead.phone}`} className="text-primary hover:underline">
                       {lead.phone}
                     </a>
-                  </td>
-                  <td className="p-3 max-w-xs truncate">{lead.interest?.last_question}</td>
-                  <td className="p-3 text-right">
+                  </TableCell>
+                  <TableCell className="max-w-xs truncate text-muted-foreground">
+                    {lead.interest?.last_question}
+                  </TableCell>
+                  <TableCell className="text-right">
                     <Button size="sm" variant="outline" onClick={() => openLeadDetails(lead.id)}>
-                      История диалога
+                      <MessageSquareText className="size-3.5" />
+                      Диалог
                     </Button>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
 
       {/* Модальное окно с историей диалога */}
-      {selectedLeadId && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg w-full max-w-2xl max-h-[80vh] flex flex-col shadow-xl">
-            <div className="p-4 border-b flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-bold">
-                  История диалога: {leadDetails?.name || "Клиент"}
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  Телефон: {leadDetails?.phone} | Сайт: {leadDetails?.site_name}
-                </p>
-              </div>
-              <Button variant="ghost" size="sm" onClick={() => setSelectedLeadId(null)}>
-                ✕
-              </Button>
-            </div>
+      <Dialog open={!!selectedLeadId} onOpenChange={(open) => !open && setSelectedLeadId(null)}>
+        <DialogContent className="flex max-h-[80vh] max-w-2xl flex-col">
+          <DialogHeader>
+            <DialogTitle>История диалога — {leadDetails?.name || "клиент"}</DialogTitle>
+            <DialogDescription>
+              {leadDetails?.phone} · {leadDetails?.site_name}
+            </DialogDescription>
+          </DialogHeader>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {loadingDetails ? (
-                <p className="text-center text-muted-foreground py-8">Загрузка истории...</p>
-              ) : messages.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">Сообщений в этом диалоге нет.</p>
-              ) : (
-                messages.map((msg) => (
-                  <div 
-                    key={msg.id} 
-                    className={`p-3 rounded-lg text-sm max-w-[85%] ${
-                      msg.role === 'user' 
-                        ? 'bg-blue-600 text-white ml-auto rounded-br-none' 
-                        : 'bg-gray-100 text-gray-900 mr-auto rounded-bl-none'
-                    }`}
-                  >
-                    <p className="font-bold text-xs mb-1 opacity-70">
-                      {msg.role === 'user' ? '👤 Клиент' : '🤖 Бот'}
-                    </p>
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
-                    <p className="text-[10px] mt-1 opacity-50 text-right">
-                      {new Date(msg.created_at).toLocaleTimeString("ru-RU", { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <div className="p-3 border-t bg-gray-50 rounded-b-lg text-center">
-              <Button variant="outline" size="sm" onClick={() => setSelectedLeadId(null)}>
-                Закрыть
-              </Button>
-            </div>
+          <div className="-mx-6 flex-1 space-y-3 overflow-y-auto px-6">
+            {loadingDetails ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">Загрузка истории...</p>
+            ) : messages.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">Сообщений в этом диалоге нет.</p>
+            ) : (
+              messages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`max-w-[85%] rounded-lg p-3 text-sm ${
+                    msg.role === 'user'
+                      ? 'ml-auto rounded-br-none bg-primary text-primary-foreground'
+                      : 'mr-auto rounded-bl-none bg-muted'
+                  }`}
+                >
+                  <p className="mb-1 flex items-center gap-1.5 text-xs font-medium opacity-70">
+                    {msg.role === 'user' ? <User className="size-3" /> : <Bot className="size-3" />}
+                    {msg.role === 'user' ? 'Клиент' : 'Бот'}
+                  </p>
+                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                  <p className="mt-1 text-right text-[10px] opacity-50">
+                    {new Date(msg.created_at).toLocaleTimeString("ru-RU", { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+              ))
+            )}
           </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

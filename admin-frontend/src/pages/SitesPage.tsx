@@ -1,11 +1,31 @@
 import { useEffect, useState, type FormEvent } from "react"
-import { Link } from "react-router-dom" // <-- 1. Добавляем импорт
+import { Link } from "react-router-dom"
+import {
+  ClipboardList,
+  Code2,
+  FileText,
+  Pencil,
+  Play,
+  Plus,
+  Upload,
+  X,
+} from "lucide-react"
 import { api } from "@/lib/api"
 import { useAuth } from "@/context/AuthContext"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
 
 interface DocumentOut {
   id: string;
@@ -28,7 +48,7 @@ export function SitesPage() {
   const { logout } = useAuth()
   const [sites, setSites] = useState<Site[]>([])
   const [loading, setLoading] = useState(true)
-  
+
   // Состояния для модалок
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState<"create" | "edit">("create")
@@ -125,16 +145,16 @@ export function SitesPage() {
 
   async function handleDeleteDocument(docId: string) {
     if (!confirm("Вы уверены, что хотите удалить этот документ из базы знаний?")) return
-    
+
     try {
       await api.delete(`/api/v1/admin/sources/${docId}?source_type=document`)
-      
+
       setSites(prevSites => prevSites.map(site => ({
         ...site,
         documents: site.documents.filter(doc => doc.id !== docId)
       })))
-      
-      loadSites() 
+
+      loadSites()
     } catch (err: any) {
       alert(err.message || "Ошибка удаления")
     }
@@ -142,10 +162,10 @@ export function SitesPage() {
 
   async function handleTriggerCrawl(siteId: string) {
     if (!confirm("Вы действительно хотите запустить полный парсинг сайта и обработку всех файлов?")) return
-    
+
     try {
       await api.post(`/api/v1/admin/sites/${siteId}/crawl`)
-      alert("Задача отправлена в очередь!")
+      alert("Парсинг запущен!")
     } catch (err: any) {
       alert(err.message || "Ошибка запуска")
     }
@@ -153,72 +173,108 @@ export function SitesPage() {
 
   return (
     <div className="mx-auto max-w-6xl p-6">
-      {/* 2. Обновленная шапка с кнопкой */}
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Управление сайтами</h1>
+        <div>
+          <h1 className="text-2xl font-semibold">Сайты</h1>
+          <p className="text-sm text-muted-foreground">Управление подключёнными сайтами застройщика</p>
+        </div>
         <div className="flex gap-2">
           <Link to="/leads">
-            <Button variant="secondary">📋 Заявки</Button>
+            <Button variant="secondary">
+              <ClipboardList className="size-4" />
+              Заявки
+            </Button>
           </Link>
           <Button variant="outline" onClick={logout}>Выйти</Button>
         </div>
       </div>
 
-      <Button onClick={openCreate} className="mb-6">Добавить сайт</Button>
+      <Button onClick={openCreate} className="mb-6">
+        <Plus className="size-4" />
+        Добавить сайт
+      </Button>
 
-      {loading ? <p>Загрузка...</p> : (
-        <div className="grid gap-6 md:grid-cols-2">
+      {loading ? (
+        <p className="text-sm text-muted-foreground">Загрузка...</p>
+      ) : sites.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Сайтов пока нет — добавьте первый.</p>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2">
           {sites.map((site) => (
             <Card key={site.id}>
               <CardHeader>
-                <CardTitle>{site.name}</CardTitle>
-                <CardDescription>{site.domain}</CardDescription>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <CardTitle>{site.name}</CardTitle>
+                    <CardDescription>{site.domain}</CardDescription>
+                  </div>
+                  <Badge variant={site.is_active ? "success" : "warning"}>
+                    {site.is_active ? "Активен" : "Отключён"}
+                  </Badge>
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap gap-2">
-                  <Button size="sm" onClick={() => openEdit(site)}>✏️ Изменить</Button>
-                  <Button size="sm" variant="outline" onClick={() => getSnippet(site.id)}>📋 Код виджета</Button>
+                  <Button size="sm" variant="outline" onClick={() => openEdit(site)}>
+                    <Pencil className="size-3.5" />
+                    Изменить
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => getSnippet(site.id)}>
+                    <Code2 className="size-3.5" />
+                    Код виджета
+                  </Button>
                 </div>
-                
-                <div className="pt-2 border-t">
-                  <Label className="text-xs font-bold mb-2 block">База знаний (Файлы):</Label>
+
+                <div className="border-t pt-4">
+                  <Label className="mb-2 block text-xs font-medium text-muted-foreground">
+                    База знаний · документы
+                  </Label>
                   {site.documents && site.documents.length > 0 ? (
-                    <ul className="text-xs space-y-2 mb-3 max-h-40 overflow-y-auto pr-1">
+                    <ul className="mb-3 max-h-40 space-y-1.5 overflow-y-auto pr-1">
                       {site.documents.map(doc => (
-                        <li key={doc.id} className="flex items-center justify-between bg-muted p-2 rounded group">
-                          <div className="flex items-center gap-2 truncate">
-                            <span>📄</span>
+                        <li
+                          key={doc.id}
+                          className="group flex items-center justify-between gap-2 rounded-md bg-muted/60 px-2.5 py-1.5 text-xs"
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            <FileText className="size-3.5 shrink-0 text-muted-foreground" />
                             <span className="truncate font-medium">{doc.filename}</span>
                           </div>
-                          <button 
+                          <button
                             onClick={() => handleDeleteDocument(doc.id)}
-                            className="text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity px-2"
+                            className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
                             title="Удалить документ"
+                            aria-label="Удалить документ"
                           >
-                            ✕
+                            <X className="size-3.5" />
                           </button>
                         </li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-xs text-muted-foreground mb-3 italic">Нет загруженных файлов</p>
+                    <p className="mb-3 text-xs italic text-muted-foreground">Нет загруженных файлов</p>
                   )}
 
-                  <Label className="text-xs text-muted-foreground mb-1 block">Загрузить новый файл:</Label>
-                  <Input 
-                    type="file" 
+                  <Label htmlFor={`upload-${site.id}`} className="mb-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Upload className="size-3.5" />
+                    Загрузить новый файл
+                  </Label>
+                  <Input
+                    id={`upload-${site.id}`}
+                    type="file"
                     accept=".pdf,.docx,.xlsx,.txt"
-                    onChange={(e) => e.target.files?.[0] && handleFileUpload(site.id, e.target.files[0])} 
+                    onChange={(e) => e.target.files?.[0] && handleFileUpload(site.id, e.target.files[0])}
                   />
                 </div>
 
-                <Button 
-                  size="sm" 
-                  variant="secondary" 
-                  className="w-full mt-2"
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="w-full"
                   onClick={() => handleTriggerCrawl(site.id)}
                 >
-                Запустить полный парсинг
+                  <Play className="size-3.5" />
+                  Запустить полный парсинг
                 </Button>
               </CardContent>
             </Card>
@@ -226,52 +282,74 @@ export function SitesPage() {
         </div>
       )}
 
-      {/* Модалка Создания/Редактирования */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg w-full max-w-md">
-            <h2 className="text-xl font-bold mb-4">{modalMode === "create" ? "Новый сайт" : "Редактирование"}</h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <Label>Название</Label>
-                <Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
-              </div>
-              {modalMode === "create" && (
-                <div>
-                  <Label>Домен</Label>
-                  <Input value={formData.domain} onChange={e => setFormData({...formData, domain: e.target.value})} required />
-                </div>
-              )}
-              <div>
-                <Label>Стартовые URL (через запятую)</Label>
-                <Input value={formData.startUrls} onChange={e => setFormData({...formData, startUrls: e.target.value})} placeholder="https://..." />
-              </div>
-              <div>
-                <Label>Исключить URL</Label>
-                <Input value={formData.excludeUrls} onChange={e => setFormData({...formData, excludeUrls: e.target.value})} placeholder="/news, /vacancies" />
-              </div>
-              <div className="flex justify-end gap-2 pt-4">
-                <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Отмена</Button>
-                <Button type="submit">Сохранить</Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Модалка Кода Виджета */}
-      {showSnippetModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg w-full max-w-lg">
-            <h2 className="text-xl font-bold mb-2">Код для вставки</h2>
-            <pre className="bg-gray-100 p-3 rounded text-xs overflow-x-auto mb-4 whitespace-pre-wrap">{snippet}</pre>
-            <div className="flex justify-end gap-2">
-              <Button onClick={() => navigator.clipboard.writeText(snippet)}>Копировать</Button>
-              <Button variant="outline" onClick={() => setShowSnippetModal(false)}>Закрыть</Button>
+      {/* Модалка создания/редактирования */}
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{modalMode === "create" ? "Новый сайт" : "Редактирование сайта"}</DialogTitle>
+            <DialogDescription>
+              {modalMode === "create"
+                ? "Укажите домен и, при необходимости, стартовые URL для парсинга."
+                : "Измените настройки сайта и правила парсинга."}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+              <Label>Название</Label>
+              <Input value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required />
             </div>
-          </div>
-        </div>
-      )}
+            {modalMode === "create" && (
+              <div className="flex flex-col gap-2">
+                <Label>Домен</Label>
+                <Input
+                  value={formData.domain}
+                  onChange={e => setFormData({ ...formData, domain: e.target.value })}
+                  placeholder="example.ru"
+                  required
+                />
+              </div>
+            )}
+            <div className="flex flex-col gap-2">
+              <Label>Стартовые URL</Label>
+              <Textarea
+                value={formData.startUrls}
+                onChange={e => setFormData({ ...formData, startUrls: e.target.value })}
+                placeholder={"https://example.ru\nhttps://example.ru/catalog"}
+                rows={3}
+              />
+              <p className="text-xs text-muted-foreground">По одному URL на строку или через запятую</p>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label>Исключить URL</Label>
+              <Textarea
+                value={formData.excludeUrls}
+                onChange={e => setFormData({ ...formData, excludeUrls: e.target.value })}
+                placeholder={"/news\n/vacancies"}
+                rows={2}
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Отмена</Button>
+              <Button type="submit">Сохранить</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Модалка кода виджета */}
+      <Dialog open={showSnippetModal} onOpenChange={setShowSnippetModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Код для установки</DialogTitle>
+            <DialogDescription>Вставьте этот тег перед закрывающим &lt;/body&gt; на сайте застройщика.</DialogDescription>
+          </DialogHeader>
+          <pre className="overflow-x-auto whitespace-pre-wrap rounded-md bg-muted p-3 text-xs">{snippet}</pre>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSnippetModal(false)}>Закрыть</Button>
+            <Button onClick={() => navigator.clipboard.writeText(snippet)}>Скопировать</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
