@@ -6,8 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Chunk
 from app.services.ai.embeddings import get_embedding
 
-# Косинусное расстояние: 0 — идентичные по смыслу, 2 — противоположные.
-DEFAULT_MAX_DISTANCE = 0.6
+DEFAULT_MAX_DISTANCE = 0.82
 
 
 async def retrieve_chunks(

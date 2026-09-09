@@ -11,7 +11,7 @@ from app.services.parsing.document_parsing import extract_text
 
 
 async def start_crawl_job(ctx, site_id_str: str, crawl_run_id_str: str):
-    print(f"🔥 [WORKER] Задача получена! Сайт: {site_id_str}")
+    print(f"[WORKER] Задача получена! Сайт: {site_id_str}")
     
     site_id = uuid.UUID(site_id_str)
     crawl_run_id = uuid.UUID(crawl_run_id_str)
