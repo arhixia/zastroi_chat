@@ -6,6 +6,7 @@
 
   var sessionKey = "zastroi_session_" + siteId;
   var visitorKey = "zastroi_visitor_" + siteId;
+  var leadSubmittedKey = "zastroi_lead_submitted_" + siteId;
 
   var sessionId = localStorage.getItem(sessionKey);
   if (!sessionId) {
@@ -18,6 +19,9 @@
     visitorId = crypto.randomUUID();
     localStorage.setItem(visitorKey, visitorId);
   }
+
+  // Проверяем, оставлял ли пользователь заявку ранее
+  var leadSubmitted = localStorage.getItem(leadSubmittedKey) === "true";
 
   // ===================== СТИЛИ =====================
   var style = document.createElement("style");
@@ -54,12 +58,12 @@
     ".zw-header-close:hover { background: rgba(255,255,255,0.15); opacity: 1; }" +
 
     /* --- Значок заявки в углу шапки --- */
-    ".zw-lead-trigger { position: absolute; top: -8px; right: -8px; width: 34px; height: 34px;" +
-    " background: #f59e0b; border-radius: 50%; border: 2.5px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.18);" +
-    " display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 20;" +
+    ".zw-lead-trigger { position: static; flex-shrink: 0; width: 32px; height: 32px;" +
+    " background: linear-gradient(135deg, #fbbf24, #f59e0b); border-radius: 50%; border: 2px solid rgba(255,255,255,0.5); box-shadow: 0 2px 6px rgba(0,0,0,0.15);" +
+    " display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 5;" +
     " transition: transform 0.2s ease; }" +
     ".zw-lead-trigger:hover { transform: scale(1.1); }" +
-    ".zw-lead-trigger svg { width: 16px; height: 16px; color: #fff; }" +
+    ".zw-lead-trigger svg { width: 22px; height: 22px; color: #fff; }" +
     ".zw-lead-trigger.zw-pulse { animation: zw-pulse-anim 1.6s infinite; }" +
     "@keyframes zw-pulse-anim { 0% { box-shadow: 0 0 0 0 rgba(245,158,11,0.55); } 70% { box-shadow: 0 0 0 9px rgba(245,158,11,0); } 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0); } }" +
 
@@ -151,7 +155,7 @@
   var ICON_CLOSE_LAUNCHER = '<svg class="zw-icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
   var ICON_SEND = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>';
   var ICON_BOT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg>';
-  var ICON_LEAD = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>';
+  var ICON_LEAD = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.05 5A5 5 0 0 1 19 8.95M15.05 1A9 9 0 0 1 23 8.94m-1 7.98v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>';
   var ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>';
 
   var button = document.createElement("button");
@@ -176,7 +180,9 @@
   leadTrigger.className = "zw-lead-trigger";
   leadTrigger.innerHTML = ICON_LEAD;
   leadTrigger.title = "Оставить заявку";
-  header.appendChild(leadTrigger);
+  header.insertBefore(leadTrigger, header.querySelector(".zw-header-close"));
+
+
 
   var log = document.createElement("div");
   log.className = "zw-log";
@@ -236,20 +242,23 @@
   root.appendChild(windowEl);
   document.body.appendChild(root);
 
-  // ===================== СОСТОЯНИЕ =====================
+  // ===================== СОСТОЯНИЕ И UI =====================
   var messageCount = 0;
   var leadFormDismissed = false;
   var isLeadPanelOpen = false;
 
-  function addMessage(role, text) {
+function addMessage(role, text) {
     var bubble = document.createElement("div");
     var isUser = role === "user";
-    if (isUser) messageCount++;
     bubble.className = "zw-bubble " + (isUser ? "zw-user" : "zw-bot");
     if (isUser) {
-      bubble.textContent = text; // без интерпретации как HTML — защита от XSS
+      bubble.textContent = text; 
     } else {
-      bubble.innerHTML = text.replace(/\n/g, "<br>");
+      var parts = text.split(/\n\n+/);
+      var htmlParts = parts.map(function(part) {
+        return part.replace(/\n/g, "<br>");
+      });
+      bubble.innerHTML = htmlParts.join("<br><br>");
     }
     log.appendChild(bubble);
     log.scrollTop = log.scrollHeight;
@@ -268,6 +277,8 @@
     if (typingEl) { typingEl.remove(); typingEl = null; }
   }
 
+
+
   function openChat() { windowEl.classList.add("zw-visible"); button.classList.add("zw-open"); input.focus(); }
   function closeChat() { windowEl.classList.remove("zw-visible"); button.classList.remove("zw-open"); }
   button.addEventListener("click", function () {
@@ -285,12 +296,48 @@
   var errorText = leadPanel.querySelector("#zw-lead-error");
   var panelCloseBtn = leadPanel.querySelector(".zw-lead-panel-close");
 
+  // ===================== ВАЛИДАЦИЯ РОССИЙСКОГО НОМЕРА =====================
+function normalizeRuDigits(raw) {
+  var digits = raw.replace(/\D/g, "");
+  if (digits.length === 0) return "";
+  if (digits[0] === "8") digits = "7" + digits.slice(1);
+  if (digits[0] === "9" && digits.length <= 10) digits = "7" + digits;
+  return digits.slice(0, 11);
+}
+
+function formatRuPhone(digits) {
+  if (!digits) return "";
+  if (digits[0] !== "7") return "+" + digits;
+  var rest = digits.slice(1);
+  var out = "+7";
+  if (rest.length > 0) out += " (" + rest.slice(0, 3);
+  if (rest.length >= 3) out += ")";
+  if (rest.length > 3) out += " " + rest.slice(3, 6);
+  if (rest.length > 6) out += "-" + rest.slice(6, 8);
+  if (rest.length > 8) out += "-" + rest.slice(8, 10);
+  return out;
+}
+
+function validateRuPhone(raw) {
+  var digits = normalizeRuDigits(raw);
+  if (digits.length !== 11 || digits[0] !== "7") {
+    return { valid: false };
+  }
+  return { valid: true, e164: "+" + digits };
+}
+
+phoneInput.addEventListener("input", function (e) {
+  var digits = normalizeRuDigits(e.target.value);
+  e.target.value = formatRuPhone(digits);
+});
+  
   function toggleLeadPanel(forceOpen) {
     if (leadFormDismissed && !forceOpen) return;
 
     isLeadPanelOpen = forceOpen !== undefined ? forceOpen : !isLeadPanelOpen;
 
     if (isLeadPanelOpen) {
+      leadFormDismissed = false; 
       leadOverlay.classList.add("zw-active");
       leadPanel.classList.add("zw-active");
       leadTrigger.classList.remove("zw-pulse");
@@ -310,7 +357,7 @@
   function dismissLeadPanel() {
     toggleLeadPanel(false);
     leadFormDismissed = true;
-}
+  }
   leadOverlay.addEventListener("click", dismissLeadPanel);
   panelCloseBtn.addEventListener("click", dismissLeadPanel);
 
@@ -323,12 +370,21 @@
 
   submitBtn.addEventListener("click", function () {
     var name = nameInput.value.trim();
-    var phone = phoneInput.value.trim();
+    var phoneRaw = phoneInput.value.trim();
 
-    if (!name || !phone) {
+    if (!name || !phoneRaw) {
       showFieldError("Заполните имя и телефон");
       return;
     }
+
+    var phoneCheck = validateRuPhone(phoneRaw);
+    if (!phoneCheck.valid) {
+      showFieldError("Введите номер в российском формате: +7 (XXX) XXX-XX-XX");
+      phoneInput.classList.add("zw-error");
+      return;
+    }
+    var phone = phoneCheck.e164; 
+
     if (!consentInput.checked) {
       showFieldError("Подтвердите согласие на обработку данных");
       return;
@@ -347,6 +403,10 @@
       body: JSON.stringify({ site_id: siteId, session_id: sessionId, name: name, phone: phone }),
     })
       .then(function () {
+        // Запоминаем, что заявка отправлена, чтобы не беспокоить пользователя
+        leadSubmitted = true;
+        localStorage.setItem(leadSubmittedKey, "true");
+
         leadForm.style.display = "none";
         leadSuccess.style.display = "flex";
         setTimeout(function () {
@@ -369,7 +429,8 @@
   });
 
   // ===================== ОБЫЧНЫЙ ЧАТ =====================
-  function processRegularMessage(text) {
+ // ===================== ОБЫЧНЫЙ ЧАТ =====================
+  function processRegularMessage(text, currentCount) {
     showTyping();
     input.disabled = true;
     sendBtn.disabled = true;
@@ -378,30 +439,46 @@
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        site_id: siteId,
-        session_id: sessionId,
-        visitor_id: visitorId,
-        message: text,
-        current_page_url: window.location.href,
-        referrer: document.referrer || null,
+          site_id: siteId,
+          session_id: sessionId,
+          visitor_id: visitorId,
+          message: text,
+          message_count: currentCount, 
+          current_page_url: window.location.href,
+          referrer: document.referrer || null,
       }),
     })
       .then(function (res) { return res.json(); })
       .then(function (data) {
         hideTyping();
-        addMessage("assistant", data.answer);
 
-        // Бэкенд уже сам решает (LangChain + few-shot), когда стоит попросить
-        // контакт — виджет больше не переспоривает это своей эвристикой.
         if (data.ask_lead === true) {
-          if (!leadFormDismissed) {
-            toggleLeadPanel(true);
+          messageCount = 0; // сбрасываем счётчик после каждого предложения оставить заявку
+
+          var parts = data.answer.split(/\n\n+/);
+          
+          if (parts.length > 1) {
+              var mainAnswer = parts[0];
+              var ctaText = parts[parts.length - 1];
+              addMessage("assistant", mainAnswer);
+              setTimeout(function() {
+                  addMessage("assistant", ctaText);
+                  setTimeout(function() { 
+                      leadFormDismissed = false;
+                      toggleLeadPanel(true); 
+                  }, 600);
+              }, 1200);
           } else {
-            // юзер уже один раз закрыл форму в этом диалоге — не навязываем,
-            // просто мягко подсвечиваем иконку
-            leadTrigger.classList.add("zw-pulse");
+              addMessage("assistant", data.answer);
+              setTimeout(function() { 
+                  leadFormDismissed = false;
+                  toggleLeadPanel(true); 
+              }, 800);
           }
-        }
+      } else {
+          addMessage("assistant", data.answer);
+      }
+
       })
       .catch(function () {
         hideTyping();
@@ -417,9 +494,12 @@
   function sendMessage() {
     var text = input.value.trim();
     if (!text) return;
-    addMessage("user", text);
+    
+    messageCount++; // Увеличиваем строго здесь один раз
+    addMessage("user", text); 
     input.value = "";
-    processRegularMessage(text);
+    
+    processRegularMessage(text, messageCount); 
   }
 
   sendBtn.addEventListener("click", sendMessage);

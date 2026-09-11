@@ -80,14 +80,22 @@ async def list_sites(db: DbSession, _: CurrentUser):
 @router.patch("/sites/{site_id}", response_model=SiteOut)
 async def update_site(site_id: uuid.UUID, payload: SiteUpdate, db: DbSession, _: CurrentUser):
     site = await _get_site_or_404(db, site_id)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+
+    updates = payload.model_dump(exclude_unset=True)
+
+    if "domain" in updates and updates["domain"] != site.domain:
+        existing = await db.execute(
+            select(Site).where(Site.domain == updates["domain"], Site.id != site_id)
+        )
+        if existing.scalar_one_or_none() is not None:
+            raise HTTPException(status.HTTP_409_CONFLICT, f"Домен {updates['domain']} уже занят")
+
+    for field, value in updates.items():
         setattr(site, field, value)
     await db.commit()
-    
+
     result = await db.execute(
-        select(Site)
-        .where(Site.id == site_id)
-        .options(joinedload(Site.documents))
+        select(Site).where(Site.id == site_id).options(joinedload(Site.documents))
     )
     site = result.scalars().first()
     return site
@@ -251,7 +259,7 @@ async def export_leads_csv(db: DbSession, _: CurrentUser):
     
     writer = csv.writer(output, delimiter=';', quoting=csv.QUOTE_MINIMAL)
 
-    writer.writerow(["Дата", "Сайт", "Имя клиента", "Телефон", "Последний вопрос"])
+    writer.writerow(["Дата", "Сайт", "Имя клиента", "Телефон", "ID диалога", "Последний вопрос"])
     
     for lead, site_name in result.all():
         last_question = "Не указан"
@@ -265,6 +273,7 @@ async def export_leads_csv(db: DbSession, _: CurrentUser):
             site_name,
             lead.name,
             lead.phone,
+            str(lead.conversation_id),
             last_question
         ])
 

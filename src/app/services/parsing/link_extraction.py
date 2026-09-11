@@ -14,6 +14,46 @@ def normalize_url(url: str) -> str:
     return parsed._replace(fragment="", path=path).geturl()
 
 
+def _extract_path(url: str) -> str:
+    """
+    Возвращает только путь URL (без схемы/домена), без trailing slash.
+    Работает как для полных URL ('http://site.ru/x'), так и для
+    "голых" путей, введённых пользователем ('/x').
+    """
+    parsed = urlparse(url)
+    path = parsed.path
+    if path != "/" and path.endswith("/"):
+        path = path.rstrip("/")
+    return path
+
+
+def is_excluded(url: str, excluded_paths: set[str]) -> bool:
+    """
+    Проверяет, попадает ли url под одно из исключений.
+    Исключения могут быть заданы как путь без расширения ('/infrastructure'),
+    как полный путь ('/infrastructure.html') или как каталог-префикс ('/news').
+    Совпадение: точное равенство ИЛИ путь страницы начинается с
+    исключённого пути и сразу за ним идёт '/', '.', '?' или конец строки
+    (чтобы '/infra' не считался совпадением для '/infrastructure.html').
+    """
+    page_path = _extract_path(url)
+    for excluded in excluded_paths:
+        if not excluded:
+            continue
+        excluded_norm = excluded if excluded.startswith("/") else "/" + excluded
+        excluded_norm = excluded_norm.rstrip("/") or "/"
+
+        if page_path == excluded_norm:
+            return True
+
+        if page_path.startswith(excluded_norm):
+            boundary = page_path[len(excluded_norm):len(excluded_norm) + 1]
+            if boundary in ("", "/", ".", "?"):
+                return True
+
+    return False
+
+
 def extract_links(html: str, base_url: str, allowed_domain: str) -> list[str]:
     soup = BeautifulSoup(html, "lxml")
     

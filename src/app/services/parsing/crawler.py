@@ -5,6 +5,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Chunk, CrawlRun, CrawlStatus, Page, PageStatus, Site, SourceType
+from app.services.parsing.link_extraction import is_excluded
 from app.services.parsing.link_extraction import extract_links, normalize_url
 from app.services.parsing.pipeline import process_fetched_page
 from app.services.parsing.site_parsing import PageFetchError, PlaywrightFetcher
@@ -18,7 +19,9 @@ async def run_crawl(db: AsyncSession, site: Site, max_pages: int = 200) -> Crawl
     await db.commit()
     await db.refresh(crawl_run)
 
-    excluded = {normalize_url(u) for u in (site.crawl_excluded_urls or [])}
+    excluded_paths = set(site.crawl_excluded_urls or [])
+    print(f"[CRAWLER] Исключённые пути: {excluded_paths}")
+
     start_urls = site.crawl_start_urls if site.crawl_start_urls else [f"https://{site.domain}"]
     queue: deque[str] = deque(normalize_url(u) for u in start_urls)
     
@@ -31,7 +34,9 @@ async def run_crawl(db: AsyncSession, site: Site, max_pages: int = 200) -> Crawl
     async with PlaywrightFetcher() as fetcher:
         while queue and len(visited) < max_pages:
             url = queue.popleft()
-            if url in visited or url in excluded:
+            if url in visited or is_excluded(url, excluded_paths):
+                if is_excluded(url, excluded_paths):
+                    print(f"[CRAWLER] Пропущено (исключено): {url}")
                 continue
             
             visited.add(url)
@@ -68,7 +73,7 @@ async def run_crawl(db: AsyncSession, site: Site, max_pages: int = 200) -> Crawl
 
             new_links = extract_links(html, base_url=url, allowed_domain=site.domain)
             for link in new_links:
-                if link not in visited and link not in excluded:
+                if link not in visited and not is_excluded(link, excluded_paths):
                     queue.append(link)
             
             if new_links:

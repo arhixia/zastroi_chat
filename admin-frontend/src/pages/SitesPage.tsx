@@ -7,6 +7,8 @@ import {
   Pencil,
   Play,
   Plus,
+  Power,
+  PowerOff,
   Upload,
   X,
 } from "lucide-react"
@@ -101,23 +103,24 @@ export function SitesPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     const payload = {
-      name: formData.name,
-      ...(modalMode === "create" && { domain: formData.domain }),
-      crawl_start_urls: formData.startUrls.split(/[\n,]/).map(s => s.trim()).filter(Boolean),
-      crawl_excluded_urls: formData.excludeUrls.split(/[\n,]/).map(s => s.trim()).filter(Boolean)
-    }
+    name: formData.name,
+    domain: formData.domain,
+    crawl_start_urls: formData.startUrls.split(/[\n,]/).map(s => s.trim()).filter(Boolean),
+    crawl_excluded_urls: formData.excludeUrls.split(/[\n,]/).map(s => s.trim()).filter(Boolean)
+  }
 
     try {
-      if (modalMode === "create") {
-        await api.post("/api/v1/admin/sites", payload)
-      } else if (currentSite) {
-        await api.patch(`/api/v1/admin/sites/${currentSite.id}`, payload)
-      }
-      setIsModalOpen(false)
-      loadSites()
-    } catch (err: any) {
-      alert(err.message || "Ошибка сохранения")
+    if (modalMode === "create") {
+      await api.post("/api/v1/admin/sites", payload)
+    } else if (currentSite) {
+      await api.patch(`/api/v1/admin/sites/${currentSite.id}`, payload)
     }
+    setIsModalOpen(false)
+    loadSites()
+  } catch (err: any) {
+    const message = err?.response?.data?.detail || err.message || "Ошибка сохранения"
+    alert(message)
+  }
   }
 
   // --- Виджет и Файлы ---
@@ -171,6 +174,18 @@ export function SitesPage() {
     }
   }
 
+  async function handleToggleActive(site: Site) {
+  const action = site.is_active ? "отключить" : "включить"
+  if (!confirm(`Вы действительно хотите ${action} сайт «${site.name}»?`)) return
+
+  try {
+    await api.patch(`/api/v1/admin/sites/${site.id}`, { is_active: !site.is_active })
+    loadSites()
+  } catch (err: any) {
+    alert(err.message || "Ошибка изменения статуса сайта")
+  }
+}
+
   return (
     <div className="mx-auto max-w-6xl p-6">
       <div className="mb-6 flex items-center justify-between">
@@ -222,6 +237,23 @@ export function SitesPage() {
                   <Button size="sm" variant="outline" onClick={() => getSnippet(site.id)}>
                     <Code2 className="size-3.5" />
                     Код виджета
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={site.is_active ? "outline" : "secondary"}
+                    onClick={() => handleToggleActive(site)}
+                  >
+                    {site.is_active ? (
+                      <>
+                        <PowerOff className="size-3.5" />
+                        Отключить
+                      </>
+                    ) : (
+                      <>
+                        <Power className="size-3.5" />
+                        Включить
+                      </>
+                    )}
                   </Button>
                 </div>
 
@@ -298,17 +330,20 @@ export function SitesPage() {
               <Label>Название</Label>
               <Input value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required />
             </div>
-            {modalMode === "create" && (
-              <div className="flex flex-col gap-2">
-                <Label>Домен</Label>
-                <Input
-                  value={formData.domain}
-                  onChange={e => setFormData({ ...formData, domain: e.target.value })}
-                  placeholder="example.ru"
-                  required
-                />
-              </div>
+            <div className="flex flex-col gap-2">
+            <Label>Домен</Label>
+            <Input
+              value={formData.domain}
+              onChange={e => setFormData({ ...formData, domain: e.target.value })}
+              placeholder="example.ru"
+              required
+            />
+            {modalMode === "edit" && (
+              <p className="text-xs text-muted-foreground">
+                Изменение домена обновит адрес, с которого принимаются запросы виджета.
+              </p>
             )}
+          </div>
             <div className="flex flex-col gap-2">
               <Label>Стартовые URL</Label>
               <Textarea

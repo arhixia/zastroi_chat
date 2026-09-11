@@ -32,7 +32,13 @@ async def classify_lead_response(message: str) -> str:
         return "QUESTION"
 
     
-async def answer_question(db: AsyncSession, site_id: uuid.UUID, question: str) -> dict:
+async def answer_question(
+    db: AsyncSession,
+    site_id: uuid.UUID,
+    question: str,
+    message_count: int = 1,
+    history: list | None = None,
+) -> dict:
     if any(kw in question.lower() for kw in ["оставить заявку", "перезвоните", "контакты"]):
         return {
             "answer": "Конечно! Пожалуйста, заполните форму ниже.",
@@ -51,7 +57,7 @@ async def answer_question(db: AsyncSession, site_id: uuid.UUID, question: str) -
     else:
         context = "Информация в базе знаний отсутствует."
 
-    result = await get_smart_response(question, context=context)
+    result = await get_smart_response(question, context=context, message_count=message_count, history=history)
 
     result["sources"] = sources
     

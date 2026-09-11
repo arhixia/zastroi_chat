@@ -8,6 +8,7 @@ class WidgetMessageIn(BaseModel):
     session_id: str
     visitor_id: str 
     message: str 
+    message_count: int = 1
     current_page_url: str | None = None
     referrer: str | None = None
   

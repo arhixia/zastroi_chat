@@ -44,13 +44,15 @@ async def sent_widget_message(payload: WidgetMessageIn, db: DbSession):
     db.add(Message(conversation_id=conversation.id, role=MessageRole.user, content=payload.message))
     await db.commit()
 
-    rag_result = await answer_question(db, site.id, payload.message)
- 
+    rag_result = await answer_question(db, site.id, payload.message, message_count=payload.message_count)
+    
+    clean_answer = rag_result["answer"].replace("\x00", "")
+
     db.add(
         Message(
             conversation_id=conversation.id,
             role=MessageRole.assistant,
-            content=rag_result["answer"],
+            content=clean_answer,
             sources=rag_result["sources"],
         )
     )
@@ -71,8 +73,13 @@ async def submit_lead(payload: LeadIn, db: DbSession):
     clean_phone = "".join(filter(str.isdigit, payload.phone))
     if clean_phone.startswith('8') and len(clean_phone) == 11:
         clean_phone = '7' + clean_phone[1:]
-    if not clean_phone.startswith('+'):
-        clean_phone = '+' + clean_phone
+    if len(clean_phone) == 10 and clean_phone.startswith('9'):
+        clean_phone = '7' + clean_phone
+
+    if len(clean_phone) != 11 or not clean_phone.startswith('7'):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Некорректный номер телефона")
+
+    clean_phone = '+' + clean_phone
 
     result_client = await db.execute(
         select(Client).where(Client.site_id == payload.site_id, Client.phone == clean_phone)

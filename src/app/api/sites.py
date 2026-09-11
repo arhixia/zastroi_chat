@@ -47,11 +47,22 @@ async def get_site(site_id: uuid.UUID, db: DbSession, _: CurrentUser):
 @router.patch("/{site_id}", response_model=SiteOut)
 async def update_site(site_id: uuid.UUID, payload: SiteUpdate, db: DbSession, _: CurrentUser):
     site = await _get_site_or_404(db, site_id)
- 
+
     updates = payload.model_dump(exclude_unset=True)
+
+    if "domain" in updates and updates["domain"] != site.domain:
+        existing = await db.execute(
+            select(Site).where(Site.domain == updates["domain"], Site.id != site_id)
+        )
+        if existing.scalar_one_or_none() is not None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"Сайт с доменом {updates['domain']} уже существует"
+            )
+
     for field, value in updates.items():
         setattr(site, field, value)
- 
+
     await db.commit()
     await db.refresh(site)
     return site
