@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 from pydantic import BaseModel
@@ -5,7 +7,7 @@ from pydantic import BaseModel
 from app.api.auth.deps import DbSession
 from app.db.models import Conversation, Message, MessageRole, Site, Lead
 from app.db.models.client import Client
-from app.schemas.widget import LeadIn, WidgetMessageIn, WidgetMessageOut
+from app.schemas.widget import LeadIn, WidgetMessageIn, WidgetMessageOut,WidgetConfigOut
 from app.services.ai.rag import answer_question, classify_lead_response
  
 router = APIRouter(prefix="/widget", tags=["Widget"])
@@ -143,3 +145,18 @@ async def classify_lead(payload: dict, db: DbSession):
     message = payload.get("message", "")
     category = await classify_lead_response(message)
     return {"category": category}
+
+
+@router.get("/config", response_model=WidgetConfigOut)
+async def get_widget_config(site_id: uuid.UUID, db: DbSession):
+    site = await db.get(Site, site_id)
+    if site is None or not site.is_active:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Сайт не найден или отключён")
+
+    return WidgetConfigOut(
+        site_id=site.id,
+        bot_name=site.widget_bot_name,
+        welcome_message=site.widget_welcome_message,
+        primary_color=site.widget_primary_color,
+        logo_url=site.widget_logo_url,
+    )

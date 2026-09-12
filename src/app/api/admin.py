@@ -197,12 +197,20 @@ async def delete_source(source_id: uuid.UUID, source_type: str, db: DbSession, _
 # --- Лиды и Аналитика ---
 
 @router.get("/leads", response_model=list[LeadOut])
-async def get_leads(db: DbSession, _: CurrentUser, phone: str | None = None):
+async def get_leads(
+    db: DbSession,
+    _: CurrentUser,
+    phone: str | None = None,
+    conversation_id: uuid.UUID | None = None,
+):
     query = select(Lead, Site.name).join_from(Lead, Site, Lead.site_id == Site.id)
     
     if phone:
         clean_phone = phone.replace(" ", "").replace("-", "")
         query = query.where(Lead.phone.contains(clean_phone))
+
+    if conversation_id:
+        query = query.where(Lead.conversation_id == conversation_id)
     
     result = await db.execute(query.order_by(Lead.created_at.desc()))
     

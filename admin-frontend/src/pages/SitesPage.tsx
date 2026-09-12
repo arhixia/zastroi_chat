@@ -4,6 +4,7 @@ import {
   ClipboardList,
   Code2,
   FileText,
+  Paintbrush,
   Pencil,
   Play,
   Plus,
@@ -44,6 +45,10 @@ interface Site {
   crawl_excluded_urls: string[];
   is_active: boolean;
   documents: DocumentOut[];
+  widget_logo_url: string | null;
+  widget_primary_color: string;
+  widget_bot_name: string;
+  widget_welcome_message: string;
 }
 
 export function SitesPage() {
@@ -57,6 +62,15 @@ export function SitesPage() {
   const [currentSite, setCurrentSite] = useState<Site | null>(null)
   const [snippet, setSnippet] = useState("")
   const [showSnippetModal, setShowSnippetModal] = useState(false)
+  const [isWidgetModalOpen, setIsWidgetModalOpen] = useState(false)
+  const [widgetSite, setWidgetSite] = useState<Site | null>(null)
+  const [widgetFormData, setWidgetFormData] = useState({
+    widget_bot_name: "",
+    widget_welcome_message: "",
+    widget_primary_color: "#2563eb",
+    widget_logo_url: "",
+  })
+  const [savingWidget, setSavingWidget] = useState(false)
 
   // Поля формы
   const [formData, setFormData] = useState({
@@ -99,6 +113,39 @@ export function SitesPage() {
     })
     setIsModalOpen(true)
   }
+
+function openWidgetSettings(site: Site) {
+  setWidgetSite(site)
+  setWidgetFormData({
+    widget_bot_name: site.widget_bot_name || "",
+    widget_welcome_message: site.widget_welcome_message || "",
+    widget_primary_color: site.widget_primary_color || "#2563eb",
+    widget_logo_url: site.widget_logo_url || "",
+  })
+  setIsWidgetModalOpen(true)
+}
+
+async function handleWidgetSubmit(e: FormEvent) {
+  e.preventDefault()
+  if (!widgetSite) return
+
+  setSavingWidget(true)
+  try {
+    await api.patch(`/api/v1/admin/sites/${widgetSite.id}`, {
+      widget_bot_name: widgetFormData.widget_bot_name,
+      widget_welcome_message: widgetFormData.widget_welcome_message,
+      widget_primary_color: widgetFormData.widget_primary_color,
+      widget_logo_url: widgetFormData.widget_logo_url || null,
+    })
+    setIsWidgetModalOpen(false)
+    loadSites()
+  } catch (err: any) {
+    const message = err?.response?.data?.detail || err.message || "Ошибка сохранения настроек виджета"
+    alert(message)
+  } finally {
+    setSavingWidget(false)
+  }
+}
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -233,6 +280,10 @@ export function SitesPage() {
                   <Button size="sm" variant="outline" onClick={() => openEdit(site)}>
                     <Pencil className="size-3.5" />
                     Изменить
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => openWidgetSettings(site)}>
+                    <Paintbrush className="size-3.5" />
+                    Настроить виджет
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => getSnippet(site.id)}>
                     <Code2 className="size-3.5" />
@@ -370,6 +421,115 @@ export function SitesPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Модалка настроек виджета */}
+<Dialog open={isWidgetModalOpen} onOpenChange={setIsWidgetModalOpen}>
+  <DialogContent>
+    <DialogHeader>
+      <DialogTitle>Настройка виджета — {widgetSite?.name}</DialogTitle>
+      <DialogDescription>
+        Эти параметры увидят посетители сайта {widgetSite?.domain} в чат-виджете.
+      </DialogDescription>
+    </DialogHeader>
+    <form onSubmit={handleWidgetSubmit} className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2">
+        <Label>Название бота</Label>
+        <Input
+          value={widgetFormData.widget_bot_name}
+          onChange={e => setWidgetFormData({ ...widgetFormData, widget_bot_name: e.target.value })}
+          placeholder="Помощник"
+          maxLength={100}
+          required
+        />
+        <p className="text-xs text-muted-foreground">Отображается в шапке чата.</p>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label>Приветственное сообщение</Label>
+        <Textarea
+          value={widgetFormData.widget_welcome_message}
+          onChange={e => setWidgetFormData({ ...widgetFormData, widget_welcome_message: e.target.value })}
+          placeholder="Здравствуйте! Чем могу помочь?"
+          rows={3}
+          maxLength={1000}
+          required
+        />
+        <p className="text-xs text-muted-foreground">
+          Первое сообщение, которое посетитель увидит при открытии чата.
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label>Основной цвет виджета</Label>
+        <div className="flex items-center gap-3">
+          <input
+            type="color"
+            value={widgetFormData.widget_primary_color}
+            onChange={e => setWidgetFormData({ ...widgetFormData, widget_primary_color: e.target.value })}
+            className="h-10 w-14 cursor-pointer rounded border"
+          />
+          <Input
+            value={widgetFormData.widget_primary_color}
+            onChange={e => setWidgetFormData({ ...widgetFormData, widget_primary_color: e.target.value })}
+            placeholder="#2563eb"
+            className="max-w-[140px]"
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Цвет кнопки чата, шапки и сообщений пользователя.
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label>URL логотипа (необязательно)</Label>
+        <Input
+          value={widgetFormData.widget_logo_url}
+          onChange={e => setWidgetFormData({ ...widgetFormData, widget_logo_url: e.target.value })}
+          placeholder="https://example.ru/logo.png"
+          type="url"
+        />
+        <p className="text-xs text-muted-foreground">
+          Заменит стандартную иконку бота в шапке чата. Оставьте пустым, чтобы использовать иконку по умолчанию.
+        </p>
+      </div>
+
+      {widgetFormData.widget_primary_color && (
+        <div className="rounded-lg border p-3">
+          <p className="mb-2 text-xs font-medium text-muted-foreground">Предпросмотр шапки</p>
+          <div
+            className="flex items-center gap-2 rounded-lg p-3 text-white"
+            style={{
+              background: `linear-gradient(135deg, ${widgetFormData.widget_primary_color}, ${widgetFormData.widget_primary_color}cc)`,
+            }}
+          >
+            <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-white/20">
+              {widgetFormData.widget_logo_url ? (
+                <img src={widgetFormData.widget_logo_url} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <span className="text-xs">🤖</span>
+              )}
+            </div>
+            <div>
+              <p className="text-sm font-semibold leading-tight">
+                {widgetFormData.widget_bot_name || "Помощник"}
+              </p>
+              <p className="text-[11px] opacity-85">Онлайн</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={() => setIsWidgetModalOpen(false)}>
+          Отмена
+        </Button>
+        <Button type="submit" disabled={savingWidget}>
+          {savingWidget ? "Сохранение..." : "Сохранить"}
+        </Button>
+      </DialogFooter>
+    </form>
+  </DialogContent>
+</Dialog>
 
       {/* Модалка кода виджета */}
       <Dialog open={showSnippetModal} onOpenChange={setShowSnippetModal}>

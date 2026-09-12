@@ -36,4 +36,10 @@ class LeadOut(BaseModel):
     
     class Config:
         from_attributes = True
-    
+
+class WidgetConfigOut(BaseModel):
+    site_id: uuid.UUID
+    bot_name: str
+    welcome_message: str
+    primary_color: str
+    logo_url: str | None = None

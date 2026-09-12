@@ -43,6 +43,8 @@ export function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
   const [searchPhone, setSearchPhone] = useState("")
+  const [searchConversationId, setSearchConversationId] = useState("")
+  
 
   // Состояние для деталей заявки
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
@@ -50,18 +52,22 @@ export function LeadsPage() {
   const [messages, setMessages] = useState<Message[]>([])
   const [loadingDetails, setLoadingDetails] = useState(false)
 
-  async function loadLeads(phone?: string) {
-    setLoading(true)
-    try {
-      const url = phone ? `/api/v1/admin/leads?phone=${phone}` : "/api/v1/admin/leads"
-      const data = await api.get<Lead[]>(url)
-      setLeads(data)
-    } catch {
-      alert("Не удалось загрузить заявки")
-    } finally {
-      setLoading(false)
-    }
+  async function loadLeads(phone?: string, conversationId?: string) {
+  setLoading(true)
+  try {
+    const params = new URLSearchParams()
+    if (phone) params.set("phone", phone)
+    if (conversationId) params.set("conversation_id", conversationId)
+    const query = params.toString()
+    const url = `/api/v1/admin/leads${query ? `?${query}` : ""}`
+    const data = await api.get<Lead[]>(url)
+    setLeads(data)
+  } catch {
+    alert("Не удалось загрузить заявки")
+  } finally {
+    setLoading(false)
   }
+}
 
   async function openLeadDetails(leadId: string) {
     setSelectedLeadId(leadId)
@@ -80,9 +86,9 @@ export function LeadsPage() {
   useEffect(() => { loadLeads() }, [])
 
   function handleSearch(e: React.FormEvent) {
-    e.preventDefault()
-    loadLeads(searchPhone)
-  }
+  e.preventDefault()
+  loadLeads(searchPhone, searchConversationId)
+}
 
   async function handleExport() {
     try {
@@ -139,23 +145,37 @@ export function LeadsPage() {
       </div>
 
       <Card className="mb-6">
-        <CardContent className="pt-6">
-          <form onSubmit={handleSearch} className="flex gap-3">
-            <Input
-              placeholder="Поиск по номеру телефона..."
-              value={searchPhone}
-              onChange={(e) => setSearchPhone(e.target.value)}
-              className="max-w-sm"
-            />
-            <Button type="submit" variant="secondary">Найти</Button>
-            {searchPhone && (
-              <Button type="button" variant="ghost" onClick={() => { setSearchPhone(""); loadLeads(); }}>
-                Сбросить
-              </Button>
-            )}
-          </form>
-        </CardContent>
-      </Card>
+  <CardContent className="pt-6">
+    <form onSubmit={handleSearch} className="flex flex-wrap gap-3">
+      <Input
+        placeholder="Поиск по номеру телефона..."
+        value={searchPhone}
+        onChange={(e) => setSearchPhone(e.target.value)}
+        className="max-w-sm"
+      />
+      <Input
+        placeholder="Поиск по ID диалога..."
+        value={searchConversationId}
+        onChange={(e) => setSearchConversationId(e.target.value)}
+        className="max-w-sm"
+      />
+      <Button type="submit" variant="secondary">Найти</Button>
+      {(searchPhone || searchConversationId) && (
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => {
+            setSearchPhone("")
+            setSearchConversationId("")
+            loadLeads()
+          }}
+        >
+          Сбросить
+        </Button>
+      )}
+    </form>
+  </CardContent>
+</Card>
 
       {loading ? (
         <p className="text-sm text-muted-foreground">Загрузка данных...</p>
