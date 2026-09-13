@@ -22,6 +22,58 @@
 
   // Проверяем, оставлял ли пользователь заявку ранее
   var leadSubmitted = localStorage.getItem(leadSubmittedKey) === "true";
+    // ===================== МАРКЕТИНГОВЫЕ МЕТКИ =====================
+  var firstPageKey = "zastroi_first_page_" + siteId;
+  var utmKey = "zastroi_utm_" + siteId;
+  var gclidKey = "zastroi_gclid_" + siteId;
+  var yclidKey = "zastroi_yclid_" + siteId;
+  var metrikaKey = "zastroi_metrika_" + siteId;
+
+  var firstPageUrl = localStorage.getItem(firstPageKey);
+  if (!firstPageUrl) {
+    firstPageUrl = window.location.href;
+    localStorage.setItem(firstPageKey, firstPageUrl);
+  }
+
+  function readStoredOrCapture(storageKey, paramName) {
+    var stored = localStorage.getItem(storageKey);
+    if (stored) return stored;
+    var urlParams = new URLSearchParams(window.location.search);
+    var val = urlParams.get(paramName);
+    if (val) localStorage.setItem(storageKey, val);
+    return val || null;
+  }
+
+  var gclid = readStoredOrCapture(gclidKey, "gclid");
+  var yclid = readStoredOrCapture(yclidKey, "yclid");
+
+  var storedUtm = localStorage.getItem(utmKey);
+  var utm = null;
+  if (storedUtm) {
+    try { utm = JSON.parse(storedUtm); } catch (e) { utm = null; }
+  } else {
+    var utmUrlParams = new URLSearchParams(window.location.search);
+    var utmKeys = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
+    var collectedUtm = {};
+    utmKeys.forEach(function (k) {
+      var v = utmUrlParams.get(k);
+      if (v) collectedUtm[k] = v;
+    });
+    if (Object.keys(collectedUtm).length > 0) {
+      utm = collectedUtm;
+      localStorage.setItem(utmKey, JSON.stringify(utm));
+    }
+  }
+
+  function getMetrikaClientId() {
+    var stored = localStorage.getItem(metrikaKey);
+    if (stored) return stored;
+    var match = document.cookie.match(/_ym_uid=(\d+)/);
+    var val = match ? match[1] : null;
+    if (val) localStorage.setItem(metrikaKey, val);
+    return val;
+  }
+  var metrikaClientId = getMetrikaClientId();
 
   // ===================== СТИЛИ =====================
   var style = document.createElement("style");
@@ -463,7 +515,7 @@ phoneInput.addEventListener("input", function (e) {
     input.disabled = true;
     sendBtn.disabled = true;
 
-    fetch(apiBase + "/api/v1/widget/message", {
+        fetch(apiBase + "/api/v1/widget/message", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -473,7 +525,12 @@ phoneInput.addEventListener("input", function (e) {
           message: text,
           message_count: currentCount, 
           current_page_url: window.location.href,
+          first_page_url: firstPageUrl,
           referrer: document.referrer || null,
+          utm: utm,
+          gclid: gclid,
+          yclid: yclid,
+          metrika_client_id: metrikaClientId,
       }),
     })
       .then(function (res) { return res.json(); })

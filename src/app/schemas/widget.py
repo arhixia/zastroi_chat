@@ -6,11 +6,16 @@ from pydantic import BaseModel
 class WidgetMessageIn(BaseModel):
     site_id: uuid.UUID
     session_id: str
-    visitor_id: str 
-    message: str 
+    visitor_id: str
+    message: str
     message_count: int = 1
-    current_page_url: str | None = None
+    current_page_url: str
+    first_page_url: str | None = None
     referrer: str | None = None
+    utm: dict | None = None
+    gclid: str | None = None
+    yclid: str | None = None
+    metrika_client_id: str | None = None
   
 class WidgetMessageOut(BaseModel):
     conversation_id: uuid.UUID

@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from sqlalchemy import select
 from pydantic import BaseModel
  
@@ -9,12 +9,39 @@ from app.db.models import Conversation, Message, MessageRole, Site, Lead
 from app.db.models.client import Client
 from app.schemas.widget import LeadIn, WidgetMessageIn, WidgetMessageOut,WidgetConfigOut
 from app.services.ai.rag import answer_question, classify_lead_response
- 
+from user_agents import parse as parse_ua
 router = APIRouter(prefix="/widget", tags=["Widget"])
 
 
+def _get_client_ip(request: Request) -> str | None:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else None
+
+
+def _parse_device_info(request: Request) -> dict:
+    ua_string = request.headers.get("user-agent", "")
+    ua = parse_ua(ua_string)
+
+    if ua.is_mobile:
+        device_type = "mobile"
+    elif ua.is_tablet:
+        device_type = "tablet"
+    elif ua.is_pc:
+        device_type = "desktop"
+    else:
+        device_type = "unknown"
+
+    return {
+        "device_type": device_type,
+        "browser": f"{ua.browser.family} {ua.browser.version_string}".strip(),
+        "os": f"{ua.os.family} {ua.os.version_string}".strip(),
+    }
+
+
 @router.post("/message")
-async def sent_widget_message(payload: WidgetMessageIn, db: DbSession):
+async def sent_widget_message(payload: WidgetMessageIn, request: Request, db: DbSession):
     site = await db.get(Site, payload.site_id)
     if site is None or not site.is_active:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Сайт не найден или отключён")
@@ -28,13 +55,22 @@ async def sent_widget_message(payload: WidgetMessageIn, db: DbSession):
     conversation = result.scalar_one_or_none()
 
     if conversation is None:
+        device_info = _parse_device_info(request)
         conversation = Conversation(
             site_id=site.id,
             session_id=payload.session_id,
             visitor_id=payload.visitor_id,
-            first_page_url=payload.current_page_url,
+            first_page_url=payload.first_page_url or payload.current_page_url,
             current_page_url=payload.current_page_url,
             referrer=payload.referrer,
+            utm=payload.utm or {},
+            gclid=payload.gclid,
+            yclid=payload.yclid,
+            metrika_client_id=payload.metrika_client_id,
+            device_type=device_info["device_type"],
+            browser=device_info["browser"],
+            os=device_info["os"],
+            ip_address=_get_client_ip(request),
         )
         db.add(conversation)
     else:
@@ -46,9 +82,24 @@ async def sent_widget_message(payload: WidgetMessageIn, db: DbSession):
     db.add(Message(conversation_id=conversation.id, role=MessageRole.user, content=payload.message))
     await db.commit()
 
-    rag_result = await answer_question(db, site.id, payload.message, message_count=payload.message_count)
-    
+    conversation.messages_since_last_offer += 1
+
+    rag_result = await answer_question(
+        db,
+        site.id,
+        payload.message,
+        message_count=conversation.messages_since_last_offer,
+    )
+
     clean_answer = rag_result["answer"].replace("\x00", "")
+
+    if rag_result.get("ask_lead"):
+        conversation.messages_since_last_offer = 0
+
+    if rag_result.get("sources"):
+        conversation.detected_interest = {"last_topic": rag_result["sources"][0]}
+
+    await db.commit()
 
     db.add(
         Message(
@@ -59,10 +110,10 @@ async def sent_widget_message(payload: WidgetMessageIn, db: DbSession):
         )
     )
     await db.commit()
- 
+
     return {
         "conversation_id": conversation.id,
-        "answer": rag_result["answer"],
+        "answer": clean_answer,
         "sources": rag_result["sources"],
         "ask_lead": rag_result.get("ask_lead", False)
     }
