@@ -12,6 +12,7 @@ import {
   PowerOff,
   Upload,
   X,
+  HelpCircle
 } from "lucide-react"
 import { api } from "@/lib/api"
 import { useAuth } from "@/context/AuthContext"
@@ -481,7 +482,15 @@ async function handleWidgetSubmit(e: FormEvent) {
       </div>
 
       <div className="flex flex-col gap-2">
-        <Label>URL логотипа (необязательно)</Label>
+        <div className="flex items-center gap-1.5">
+          <Label>URL логотипа (необязательно)</Label>
+          <span 
+            title="Оптимальный размер: квадратное изображение 128x128, 256x256, 384x384 или до 500x500 px"
+            className="cursor-help text-muted-foreground transition-colors hover:text-foreground inline-flex items-center"
+          >
+            <HelpCircle className="size-4" />
+          </span>
+        </div>
         <Input
           value={widgetFormData.widget_logo_url}
           onChange={e => setWidgetFormData({ ...widgetFormData, widget_logo_url: e.target.value })}

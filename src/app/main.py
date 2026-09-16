@@ -4,15 +4,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
+from app.settings.config import settings
 from app.api.auth.auth import router as auth_router
 from app.api.admin import router as admin_router
 from app.api.sites import router as sites_router
 from app.api.widget import router as widget_router
  
 
-
-
-app = FastAPI()
+app = FastAPI(
+    debug=settings.DEBUG,
+)
 
 
 app.add_middleware(

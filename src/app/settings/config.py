@@ -6,7 +6,6 @@ load_dotenv()
 
 
 class Settings:
-    ENV: str = os.getenv("ENV", "local")
     DEBUG: bool = os.getenv("DEBUG", "true").lower() == "true"
 
     DB_HOST: str = os.getenv("DB_HOST")
