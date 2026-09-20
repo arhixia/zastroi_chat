@@ -14,7 +14,6 @@ from app.schemas.widget import LeadOut
 from app.settings.config import settings
 from app.api.auth.deps import CurrentUser, DbSession
 from app.api.auth.auth import get_password_hash
-from app.api.sites import _get_site_or_404
 from app.db.models.admin import Admin
 from app.db.models.chunk import Chunk, SourceType
 from app.db.models.message import Message
@@ -32,6 +31,13 @@ router = APIRouter(prefix="/admin", tags=["Admin"])
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
+
+async def _get_site_or_404(db: DbSession, site_id: uuid.UUID) -> Site:
+    result = await db.execute(select(Site).where(Site.id == site_id))
+    site = result.scalar_one_or_none()
+    if site is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Сайт не найден")
+    return site
 
 # --- Управление сайтами ---
 
@@ -67,7 +73,7 @@ async def list_sites(db: DbSession, _: CurrentUser):
     result = await db.execute(
         select(Site)
         .options(joinedload(Site.documents))
-        .order_by(Site.created_at.desc())
+        .order_by(Site.is_active.desc(), Site.created_at.desc())
     )
     sites = result.scalars().unique().all()
     

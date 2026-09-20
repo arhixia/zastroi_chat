@@ -7,7 +7,6 @@ from fastapi.responses import FileResponse
 from app.settings.config import settings
 from app.api.auth.auth import router as auth_router
 from app.api.admin import router as admin_router
-from app.api.sites import router as sites_router
 from app.api.widget import router as widget_router
  
 
@@ -26,7 +25,6 @@ app.add_middleware(
 
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
-app.include_router(sites_router, prefix="/api/v1")
 app.include_router(widget_router, prefix="/api/v1")
  
 WIDGET_JS_PATH = Path(__file__).resolve().parent / "static" / "widget.js"
