@@ -38,12 +38,41 @@ interface LeadDetailsResponse {
   messages: Message[];
 }
 
+interface Filters {
+  name: string
+  phone: string
+  dateFrom: string
+  dateTo: string
+  jk: string
+  obj: string
+  conversationId: string
+}
+
+const emptyFilters: Filters = {
+  name: "", phone: "", dateFrom: "", dateTo: "", jk: "", obj: "", conversationId: "",
+}
+
+function buildQuery(f: Filters) {
+  const params = new URLSearchParams()
+  if (f.name.trim()) params.set("name", f.name.trim())
+  if (f.phone.trim()) params.set("phone", f.phone.trim())
+  if (f.dateFrom) params.set("date_from", f.dateFrom)
+  if (f.dateTo) params.set("date_to", f.dateTo)
+  if (f.jk.trim()) params.set("jk", f.jk.trim())
+  if (f.obj.trim()) params.set("obj", f.obj.trim())
+  if (f.conversationId.trim()) params.set("conversation_id", f.conversationId.trim())
+  const q = params.toString()
+  return q ? `?${q}` : ""
+}
+
 export function LeadsPage() {
   const { logout } = useAuth()
   const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
-  const [searchPhone, setSearchPhone] = useState("")
-  const [searchConversationId, setSearchConversationId] = useState("")
+  const [filters, setFilters] = useState<Filters>(emptyFilters)
+  const setFilter = (key: keyof Filters) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setFilters((f) => ({ ...f, [key]: e.target.value }))
+  const hasFilters = Object.values(filters).some(Boolean)
   
 
   // Состояние для деталей заявки
@@ -52,21 +81,26 @@ export function LeadsPage() {
   const [messages, setMessages] = useState<Message[]>([])
   const [loadingDetails, setLoadingDetails] = useState(false)
 
-  async function loadLeads(phone?: string, conversationId?: string) {
-  setLoading(true)
-  try {
-    const params = new URLSearchParams()
-    if (phone) params.set("phone", phone)
-    if (conversationId) params.set("conversation_id", conversationId)
-    const query = params.toString()
-    const url = `/api/v1/admin/leads${query ? `?${query}` : ""}`
-    const data = await api.get<Lead[]>(url)
-    setLeads(data)
-  } catch {
-    alert("Не удалось загрузить заявки")
-  } finally {
-    setLoading(false)
+  async function loadLeads(f: Filters = filters) {
+    setLoading(true)
+    try {
+      const data = await api.get<Lead[]>(`/api/v1/admin/leads${buildQuery(f)}`)
+      setLeads(data)
+    } catch {
+      alert("Не удалось загрузить заявки")
+    } finally {
+      setLoading(false)
+    }
   }
+
+  function handleSearch(e: React.FormEvent) {
+    e.preventDefault()
+    loadLeads()
+  }
+
+  function handleReset() {
+    setFilters(emptyFilters)
+    loadLeads(emptyFilters)
 }
 
   async function openLeadDetails(leadId: string) {
@@ -85,10 +119,6 @@ export function LeadsPage() {
 
   useEffect(() => { loadLeads() }, [])
 
-  function handleSearch(e: React.FormEvent) {
-  e.preventDefault()
-  loadLeads(searchPhone, searchConversationId)
-}
 
   async function handleExport() {
     try {
@@ -146,34 +176,27 @@ export function LeadsPage() {
 
       <Card className="mb-6">
   <CardContent className="pt-6">
-    <form onSubmit={handleSearch} className="flex flex-wrap gap-3">
-      <Input
-        placeholder="Поиск по номеру телефона..."
-        value={searchPhone}
-        onChange={(e) => setSearchPhone(e.target.value)}
-        className="max-w-sm"
-      />
-      <Input
-        placeholder="Поиск по ID диалога..."
-        value={searchConversationId}
-        onChange={(e) => setSearchConversationId(e.target.value)}
-        className="max-w-sm"
-      />
-      <Button type="submit" variant="secondary">Найти</Button>
-      {(searchPhone || searchConversationId) && (
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={() => {
-            setSearchPhone("")
-            setSearchConversationId("")
-            loadLeads()
-          }}
-        >
-          Сбросить
-        </Button>
-      )}
-    </form>
+<form onSubmit={handleSearch} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+  <Input placeholder="Имя" value={filters.name} onChange={setFilter("name")} />
+  <Input placeholder="Телефон" value={filters.phone} onChange={setFilter("phone")} />
+  <Input placeholder="ЖК (часть названия)" value={filters.jk} onChange={setFilter("jk")} />
+  <Input placeholder="Объект (часть названия)" value={filters.obj} onChange={setFilter("obj")} />
+  <div className="flex items-center gap-2">
+    <span className="text-sm text-muted-foreground">с</span>
+    <Input type="date" value={filters.dateFrom} onChange={setFilter("dateFrom")} />
+  </div>
+  <div className="flex items-center gap-2">
+    <span className="text-sm text-muted-foreground">по</span>
+    <Input type="date" value={filters.dateTo} onChange={setFilter("dateTo")} />
+  </div>
+  <Input placeholder="ID диалога" value={filters.conversationId} onChange={setFilter("conversationId")} />
+  <div className="flex gap-2">
+    <Button type="submit" variant="secondary">Найти</Button>
+    {hasFilters && (
+      <Button type="button" variant="ghost" onClick={handleReset}>Сбросить</Button>
+    )}
+  </div>
+</form>
   </CardContent>
 </Card>
 

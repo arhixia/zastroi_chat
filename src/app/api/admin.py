@@ -1,12 +1,14 @@
 import csv
+from datetime import date, datetime, time, timedelta, timezone
 import io
 from pathlib import Path
+import re
 import uuid
 
 from arq.connections import ArqRedis
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select, update
+from sqlalchemy import exists, func, select, update
 from sqlalchemy.orm import joinedload
 
 from app.db.models.conversation import Conversation
@@ -30,6 +32,51 @@ router = APIRouter(prefix="/admin", tags=["Admin"])
 
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _mentioned_in_dialog(value: str):
+    """ЖК/объект упомянут в любом сообщении диалога заявки."""
+    return exists().where(
+        Message.conversation_id == Lead.conversation_id,
+        Message.content.icontains(value.strip(), autoescape=True),
+    )
+
+
+def _leads_query(
+    name: str | None,
+    phone: str | None,
+    date_from: date | None,
+    date_to: date | None,
+    jk: str | None,
+    obj: str | None,
+    conversation_id: uuid.UUID | None,
+):
+    query = select(Lead, Site.name).join(Site, Lead.site_id == Site.id)
+
+    if name and name.strip():
+        query = query.where(Lead.name.icontains(name.strip(), autoescape=True))
+
+    if phone:
+        clean_phone = re.sub(r"[\s\-()]", "", phone)
+        db_phone = func.regexp_replace(Lead.phone, r"[\s\-()]", "", "g")
+        query = query.where(db_phone.contains(clean_phone))
+
+    if date_from:
+        query = query.where(Lead.created_at >= datetime.combine(date_from, time.min, tzinfo=timezone.utc))
+    if date_to:
+        query = query.where(
+            Lead.created_at < datetime.combine(date_to + timedelta(days=1), time.min, tzinfo=timezone.utc)
+        )
+
+    if jk and jk.strip():
+        query = query.where(_mentioned_in_dialog(jk))
+    if obj and obj.strip():
+        query = query.where(_mentioned_in_dialog(obj))
+
+    if conversation_id:
+        query = query.where(Lead.conversation_id == conversation_id)
+
+    return query.order_by(Lead.created_at.desc())
 
 
 async def _get_site_or_404(db: DbSession, site_id: uuid.UUID) -> Site:
@@ -206,34 +253,29 @@ async def delete_source(source_id: uuid.UUID, source_type: str, db: DbSession, _
 async def get_leads(
     db: DbSession,
     _: CurrentUser,
+    name: str | None = None,
     phone: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    jk: str | None = None,
+    obj: str | None = None,
     conversation_id: uuid.UUID | None = None,
 ):
-    query = select(Lead, Site.name).join_from(Lead, Site, Lead.site_id == Site.id)
-    
-    if phone:
-        clean_phone = phone.replace(" ", "").replace("-", "")
-        query = query.where(Lead.phone.contains(clean_phone))
-
-    if conversation_id:
-        query = query.where(Lead.conversation_id == conversation_id)
-    
-    result = await db.execute(query.order_by(Lead.created_at.desc()))
-    
-    leads_out = []
-    for lead, site_name in result.all():
-        lead_dict = {
+    result = await db.execute(
+        _leads_query(name, phone, date_from, date_to, jk, obj, conversation_id)
+    )
+    return [
+        {
             "id": lead.id,
             "site_id": lead.site_id,
             "site_name": site_name,
             "name": lead.name,
             "phone": lead.phone,
             "interest": lead.interest,
-            "created_at": lead.created_at
+            "created_at": lead.created_at,
         }
-        leads_out.append(lead_dict)
-        
-    return leads_out
+        for lead, site_name in result.all()
+    ]
 
 
 @router.get("/leads/{lead_id}/details")
