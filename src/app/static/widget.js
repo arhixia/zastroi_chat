@@ -1,8 +1,8 @@
 (function () {
   var script = document.currentScript;
   var siteId = script.getAttribute("data-site-id");
-  var privacyUrl = script.getAttribute("data-privacy-url") || "#";
   var apiBase = new URL(script.src).origin;
+  var PRIVACY_URL = "https://policies.google.com/privacy";
 
   var sessionKey = "zastroi_session_" + siteId;
   var visitorKey = "zastroi_visitor_" + siteId;
@@ -190,11 +190,11 @@
     ".zw-send:disabled { opacity: 0.5; cursor: default; }" +
     ".zw-send svg { width: 15px; height: 15px; }" +
 
-    "@media (max-width: 480px) {" +
-    "  .zw-window { top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; max-height: 100%; border-radius: 0; }" +
-    "  .zw-launcher { bottom: 16px; right: 16px; }" +
-    "  .zw-input-row { padding-bottom: max(10px, env(safe-area-inset-bottom)); }" +
-    "  .zw-lead-panel { left: 12px; right: 12px; }" +
+        "@media (max-width: 480px) {" +
+    "  .zw-window { top: auto; left: 10px; right: 10px; bottom: 88px; width: auto; height: 70vh; height: 70dvh; max-height: 560px; border-radius: 16px; }" +
+    "  .zw-launcher { bottom: 16px; right: 16px; width: 56px; height: 56px; }" +
+    "  .zw-input, .zw-lead-input { font-size: 16px; }" +
+    "  .zw-lead-panel { left: 10px; right: 10px; max-height: calc(100% - 78px); overflow-y: auto; }" +
     "}";
   document.head.appendChild(style);
 
@@ -262,7 +262,7 @@
         '<div class="zw-lead-error-text" id="zw-lead-error">Заполните имя и телефон</div>' +
         '<div class="zw-lead-consent">' +
           '<input type="checkbox" id="zw-consent">' +
-          '<label for="zw-consent">Согласен(а) на обработку персональных данных согласно <a href="' + privacyUrl + '" target="_blank" rel="noopener">политике конфиденциальности</a></label>' +
+          '<label for="zw-consent">Согласен(а) на обработку персональных данных согласно <a href="' + PRIVACY_URL + '" target="_blank" rel="noopener">политике конфиденциальности</a></label>' +
         "</div>" +
         '<button class="zw-lead-btn" id="zw-submit">Отправить</button>' +
       "</div>" +
