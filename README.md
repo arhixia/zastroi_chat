@@ -8,7 +8,7 @@ DB_USER=postgres
 DB_PASS=pass                    
 
 ###
-# можно не менять
+# можно не менять (кроме OPENROUTER_API_KEY,JWT_SECRET)
 REDIS_HOST=redis             # имя сервиса Redis
 
 REDIS_PORT=6379              # порт Redis
