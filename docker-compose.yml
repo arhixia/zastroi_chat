@@ -1,15 +1,11 @@
 services:
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: chatbot_db
     restart: unless-stopped
-    env_file: .env
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASS}
       POSTGRES_DB: ${DB_NAME}
-    ports:
-      - "${DB_HOST_PORT:-5433}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
@@ -18,15 +14,12 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-    networks:
-      - zastroi_net
+    networks: [zastroi_net]
 
   redis:
     image: redis:7-alpine
-    container_name: chatbot_redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
     healthcheck:
@@ -34,89 +27,60 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-    networks:
-      - zastroi_net
+    networks: [zastroi_net]
+
+  migrate:
+    build: .
+    image: chatbot-backend
+    env_file: .env
+    command: alembic upgrade head
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+    networks: [zastroi_net]
 
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: chatbot_api
+    image: chatbot-backend
     restart: unless-stopped
     env_file: .env
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
     ports:
       - "8000:8000"
     volumes:
-      - ./src:/app/src
-      - ./migrations:/app/migrations
       - uploads_data:/app/uploads
-    command: >
-      sh -c "
-        alembic upgrade head &&
-        uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --app-dir src
-      "
-    networks:
-      - zastroi_net
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --app-dir src
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    networks: [zastroi_net]
 
   worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: chatbot_worker
+    image: chatbot-backend
     restart: unless-stopped
     env_file: .env
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
     volumes:
-      - ./src:/app/src
       - uploads_data:/app/uploads
     working_dir: /app/src
     command: arq app.workers.worker_settings.WorkerSettings
-    networks:
-      - zastroi_net
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    networks: [zastroi_net]
 
   admin-frontend:
     build:
       context: ./admin-frontend
-      dockerfile: Dockerfile
       args:
         VITE_API_BASE_URL: ${API_HOST}
-    container_name: chatbot_admin_frontend
     restart: unless-stopped
-    volumes:
-      - ./admin-frontend/src:/app/src
-      - ./admin-frontend/public:/app/public
-      - ./admin-frontend/index.html:/app/index.html
-      - ./admin-frontend/vite.config.ts:/app/vite.config.ts
-      - ./admin-frontend/tsconfig.json:/app/tsconfig.json
-      - ./admin-frontend/package.json:/app/package.json
-      - ./admin-frontend/package-lock.json:/app/package-lock.json
-      - /app/node_modules
     ports:
-      - "5173:5173"
-    networks:
-      - zastroi_net
-
-  test-builder-site:
-    image: nginx:alpine
-    container_name: chatbot_test_site
-    restart: unless-stopped
-    volumes:
-      - ./test_builder_site:/usr/share/nginx/html:ro
-    ports:
-      - "8081:80"
-    networks:
-      zastroi_net:
-        aliases:
-          - test-builder-site # Явный алиас для DNS внутри Docker
+      - "5173:80"
+    networks: [zastroi_net]
 
 volumes:
   pgdata:
