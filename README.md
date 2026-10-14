@@ -5,7 +5,7 @@ cp .env.example .env
 docker compose up -d --build
 
 # 3. Создать админа
-docker compose exec api sh -c "cd src && python scripts/create_admin.py <username> <password>"
+docker compose exec api sh -c "cd src && python scripts/create_admin.py ЮЗЕРНЕЙМ ПАРОЛЬ"
 
 
 # Пример добавления сайта в админке:
