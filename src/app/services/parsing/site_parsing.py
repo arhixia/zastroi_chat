@@ -81,7 +81,7 @@ class PlaywrightFetcher:
                 raise PageFetchError(f"{url}: сервер вернул статус {response.status}")
 
             try:
-                await page.wait_for_load_state("networkidle", timeout=8_000)
+                await page.wait_for_load_state("networkidle", timeout=3_000)
             except PlaywrightTimeoutError:
                 pass
 
