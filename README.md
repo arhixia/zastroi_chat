@@ -15,11 +15,11 @@ test123
 
 Домен (без http:// !!)
 
-test-builder-site
+72dom.com
 
 Стартовые URL
 
-http://test-builder-site/index.html
+https://72dom.com/
 
 По одному URL на строку или через запятую
 

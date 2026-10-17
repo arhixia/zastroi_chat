@@ -35,11 +35,16 @@ class PlaywrightFetcher:
 
     async def __aenter__(self) -> "PlaywrightFetcher":
         self._playwright = await async_playwright().start()
-        self._browser = await self._playwright.chromium.launch(headless=True)
+        self._browser = await self._playwright.chromium.launch(
+            headless=True,
+            args=["--disable-dev-shm-usage", "--no-sandbox"],
+        )
         self._context = await self._browser.new_context(
             user_agent=(
-                "Mozilla/5.0 (compatible; ZastroiChatbotCrawler/1.0)"
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
             ),
+            locale="ru-RU",
             viewport={"width": 1366, "height": 900},
         )
 
@@ -62,23 +67,23 @@ class PlaywrightFetcher:
             await self._playwright.stop()
 
     async def fetch(self, url: str) -> str:
-        """
-        Открывает страницу, дожидается загрузки (в т.ч. JS-рендеринга)
-        и возвращает HTML уже после выполнения JS — через page.content(),
-        а не "сырой" ответ сервера.
-        """
         if self._context is None:
             raise RuntimeError("PlaywrightFetcher нужно использовать через 'async with'")
 
         page: Page = await self._context.new_page()
         try:
-            response = await page.goto(url, wait_until="networkidle", timeout=self.timeout_ms)
+            response = await page.goto(url, wait_until="domcontentloaded", timeout=self.timeout_ms)
 
             if response is None:
                 raise PageFetchError(f"{url}: не удалось получить ответ от сервера")
 
             if response.status >= 400:
                 raise PageFetchError(f"{url}: сервер вернул статус {response.status}")
+
+            try:
+                await page.wait_for_load_state("networkidle", timeout=8_000)
+            except PlaywrightTimeoutError:
+                pass
 
             return await page.content()
 
